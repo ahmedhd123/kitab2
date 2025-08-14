@@ -70,3 +70,6 @@ coverage/
 
 # Windows
 windows/
+
+# Large files
+flutter_windows.zip
