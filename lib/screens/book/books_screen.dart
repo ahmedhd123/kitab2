@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/book_service.dart';
 import '../../models/book_model.dart';
-import 'book_details_screen.dart';
+import '../../widgets/book_card.dart';
 
 class BooksScreen extends StatefulWidget {
   const BooksScreen({super.key});
@@ -17,6 +17,10 @@ class _BooksScreenState extends State<BooksScreen> with TickerProviderStateMixin
   String _selectedCategory = 'الكل';
   String _searchQuery = '';
   String _sortBy = 'الأحدث'; // الأحدث، الأعلى تقييماً، الأكثر تحميلاً
+  String _authorFilter = '';
+  double _minRating = 0.0;
+  bool _isLoading = false;
+  List<BookModel>? _advancedResults;
 
   @override
   void initState() {
@@ -160,6 +164,8 @@ class _BooksScreenState extends State<BooksScreen> with TickerProviderStateMixin
                       onChanged: (value) {
                         setState(() {
                           _searchQuery = value;
+                          // update results locally after server fetch
+                          _applyFilters();
                         });
                       },
                     ),
@@ -182,6 +188,7 @@ class _BooksScreenState extends State<BooksScreen> with TickerProviderStateMixin
                               onSelected: (selected) {
                                 setState(() {
                                   _selectedCategory = category;
+                                  _applyFilters();
                                 });
                               },
                               selectedColor: Theme.of(context).primaryColor.withOpacity(0.2),
@@ -209,8 +216,8 @@ class _BooksScreenState extends State<BooksScreen> with TickerProviderStateMixin
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddBookDialog,
-        child: const Icon(Icons.add),
         tooltip: 'إضافة كتاب جديد',
+        child: const Icon(Icons.add),
       ),
     );
   }
@@ -218,8 +225,18 @@ class _BooksScreenState extends State<BooksScreen> with TickerProviderStateMixin
   Widget _buildAllBooksTab() {
     return Consumer<BookService>(
       builder: (context, bookService, child) {
-        final books = bookService.searchBooks(_searchQuery, category: _selectedCategory);
-        final sortedBooks = _sortBooks(books);
+        // Use server-side advanced results when available
+        final source = _advancedResults ?? bookService.searchBooks(_searchQuery, category: _selectedCategory);
+
+        // apply local title/author search
+        final filtered = source.where((b) {
+          final matchesQuery = _searchQuery.isEmpty || b.title.toLowerCase().contains(_searchQuery.toLowerCase()) || b.author.toLowerCase().contains(_searchQuery.toLowerCase());
+          return matchesQuery;
+        }).toList();
+
+        final sortedBooks = _sortBooks(filtered);
+
+        if (_isLoading) return const Center(child: CircularProgressIndicator());
 
         if (sortedBooks.isEmpty) {
           return _buildEmptyState('لا توجد كتب تطابق البحث', Icons.search_off);
@@ -275,154 +292,7 @@ class _BooksScreenState extends State<BooksScreen> with TickerProviderStateMixin
     );
   }
 
-  Widget _buildBookCard(BookModel book) {
-    return Consumer<BookService>(
-      builder: (context, bookService, child) {
-        final isSaved = bookService.isBookSaved(book.id);
-        
-        return Card(
-          elevation: 4,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: InkWell(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => BookDetailsScreen(book: book),
-                ),
-              );
-            },
-            borderRadius: BorderRadius.circular(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // غلاف الكتاب
-                Expanded(
-                  flex: 3,
-                  child: Container(
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: _getBookColor(book.category).withOpacity(0.2),
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(12),
-                      ),
-                    ),
-                    child: Stack(
-                      children: [
-                        Center(
-                          child: Icon(
-                            Icons.menu_book,
-                            size: 48,
-                            color: _getBookColor(book.category),
-                          ),
-                        ),
-                        Positioned(
-                          top: 8,
-                          right: 8,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: _getBookColor(book.category),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(
-                              book.category,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          top: 8,
-                          left: 8,
-                          child: IconButton(
-                            icon: Icon(
-                              isSaved ? Icons.bookmark : Icons.bookmark_border,
-                              color: isSaved ? Colors.red : Colors.grey,
-                            ),
-                            onPressed: () {
-                              if (isSaved) {
-                                bookService.unsaveBook(book.id);
-                              } else {
-                                bookService.saveBook(book.id);
-                              }
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                // معلومات الكتاب
-                Expanded(
-                  flex: 2,
-                  child: Padding(
-                    padding: const EdgeInsets.all(12.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          book.title,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          book.author,
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 12,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const Spacer(),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.star,
-                                  size: 14,
-                                  color: Colors.amber,
-                                ),
-                                const SizedBox(width: 2),
-                                Text(
-                                  book.averageRating.toStringAsFixed(1),
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                              ],
-                            ),
-                            Text(
-                              '${book.downloadCount}',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.grey[500],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
+  Widget _buildBookCard(BookModel book) => BookCard(book: book);
 
   Widget _buildEmptyState(String message, IconData icon) {
     return Center(
@@ -469,20 +339,6 @@ class _BooksScreenState extends State<BooksScreen> with TickerProviderStateMixin
     return sorted;
   }
 
-  Color _getBookColor(String category) {
-    const colors = {
-      'الأدب': Colors.orange,
-      'العلوم': Colors.blue,
-      'التاريخ': Colors.purple,
-      'الفلسفة': Colors.red,
-      'التكنولوجيا': Colors.teal,
-      'الدين': Colors.green,
-      'الطبخ': Colors.brown,
-      'الرياضة': Colors.indigo,
-    };
-    return colors[category] ?? Colors.grey;
-  }
-
   void _showFilterDialog() {
     showDialog(
       context: context,
@@ -491,25 +347,52 @@ class _BooksScreenState extends State<BooksScreen> with TickerProviderStateMixin
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            'الأحدث',
-            'الأعلى تقييماً',
-            'الأكثر تحميلاً',
-            'الأبجدي',
-          ].map((sortOption) {
-            return RadioListTile<String>(
-              title: Text(sortOption),
-              value: sortOption,
-              groupValue: _sortBy,
-              onChanged: (value) {
-                setState(() {
-                  _sortBy = value!;
-                });
-                Navigator.pop(context);
-              },
-            );
-          }).toList(),
+            // Sort options
+            ...['الأحدث', 'الأعلى تقييماً', 'الأكثر تحميلاً', 'الأبجدي'].map((sortOption) {
+              return RadioListTile<String>(
+                title: Text(sortOption),
+                value: sortOption,
+                groupValue: _sortBy,
+                onChanged: (value) {
+                  setState(() {
+                    _sortBy = value!;
+                  });
+                },
+              );
+            }).toList(),
+            const SizedBox(height: 8),
+            // Author filter
+            TextField(
+              decoration: const InputDecoration(labelText: 'مؤلف (احتياطي للبحث على الخادم)'),
+              onChanged: (v) => _authorFilter = v,
+            ),
+            const SizedBox(height: 8),
+            // Min rating
+            Row(
+              children: [
+                const Text('الحد الأدنى للتقييم'),
+                Expanded(
+                  child: Slider(
+                    min: 0,
+                    max: 5,
+                    divisions: 5,
+                    value: _minRating,
+                    label: _minRating.toStringAsFixed(1),
+                    onChanged: (v) => setState(() => _minRating = v),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
         actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _applyFilters();
+            },
+            child: const Text('تطبيق'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('إغلاق'),
@@ -519,6 +402,32 @@ class _BooksScreenState extends State<BooksScreen> with TickerProviderStateMixin
     );
   }
 
+
+  Future<void> _applyFilters() async {
+    setState(() {
+      _isLoading = true;
+    });
+    try {
+      final bookService = Provider.of<BookService>(context, listen: false);
+      final results = await bookService.fetchBooksAdvanced(
+        category: _selectedCategory,
+        author: _authorFilter.isNotEmpty ? _authorFilter : null,
+        minRating: _minRating > 0 ? _minRating : null,
+        sortBy: _sortBy == 'الأعلى تقييماً' ? 'rating' : (_sortBy == 'الأكثر تحميلاً' ? 'downloads' : 'recent'),
+      );
+      setState(() {
+        _advancedResults = results;
+      });
+    } catch (_) {
+      setState(() {
+        _advancedResults = null;
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
   void _showAddBookDialog() {
     // TODO: تطبيق صفحة إضافة كتاب جديد
     ScaffoldMessenger.of(context).showSnackBar(

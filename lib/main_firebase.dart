@@ -1,21 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
-import 'firebase_options.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+// ملاحظة: ملف firebase_options.dart غير موجود حالياً. قم بتشغيل
+// flutterfire configure
+// لتوليده، ثم أزل الشرط الوقائي أدناه.
+// import 'firebase_options.dart';
 import 'services/auth_service.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  // تهيئة Firebase: في حال توفر firebase_options.dart استخدم الخيارات، وإلا استخدم الإعداد الافتراضي
+  try {
+    // ignore: unused_local_variable
+    // DefaultFirebaseOptions.currentPlatform;
+    await Firebase.initializeApp();
+  } catch (e) {
+    // محاولة احتياطية بدون خيارات
+    try { await Firebase.initializeApp(); } catch (_) {}
+  }
   runApp(const KitabReaderApp());
 }
 
 class KitabReaderApp extends StatelessWidget {
-  const KitabReaderApp({Key? key}) : super(key: key);
+  const KitabReaderApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -29,6 +39,19 @@ class KitabReaderApp extends StatelessWidget {
           primarySwatch: Colors.blue,
           useMaterial3: true,
         ),
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [
+          Locale('ar'),
+          Locale('en'),
+        ],
+        locale: const Locale('ar'),
+        builder: (context, child) {
+          return Directionality(textDirection: TextDirection.rtl, child: child!);
+        },
         home: const AuthWrapper(),
         routes: {
           '/login': (context) => const LoginScreen(),
@@ -43,7 +66,7 @@ class KitabReaderApp extends StatelessWidget {
 
 // هذا Widget يتحقق من حالة المصادقة ويوجه المستخدم للشاشة المناسبة
 class AuthWrapper extends StatelessWidget {
-  const AuthWrapper({Key? key}) : super(key: key);
+  const AuthWrapper({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -73,7 +96,7 @@ class AuthWrapper extends StatelessWidget {
 }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+  const HomeScreen({super.key});
 
   @override
   _HomeScreenState createState() => _HomeScreenState();
@@ -164,7 +187,7 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class HomeTab extends StatelessWidget {
-  const HomeTab({Key? key}) : super(key: key);
+  const HomeTab({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -278,7 +301,7 @@ class HomeTab extends StatelessWidget {
 }
 
 class BooksTab extends StatelessWidget {
-  const BooksTab({Key? key}) : super(key: key);
+  const BooksTab({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -304,7 +327,7 @@ class BooksTab extends StatelessWidget {
 }
 
 class ProfileTab extends StatelessWidget {
-  const ProfileTab({Key? key}) : super(key: key);
+  const ProfileTab({super.key});
 
   @override
   Widget build(BuildContext context) {

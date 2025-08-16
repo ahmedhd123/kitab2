@@ -1,11 +1,13 @@
 import 'package:flutter/foundation.dart';
 import '../models/book_model.dart';
 import '../models/reading_progress_model.dart';
+import 'book_repository.dart';
 
 class BookService extends ChangeNotifier {
   final List<BookModel> _books = [];
   final List<ReadingProgressModel> _readingProgress = [];
   final List<String> _savedBooks = [];
+  final BookRepository? _repository; // مستودع Firestore اختياري
   
   bool _isLoading = false;
   String? _error;
@@ -35,8 +37,26 @@ class BookService extends ChangeNotifier {
     'الرومانسية',
   ];
 
-  BookService() {
+  BookService({BookRepository? repository}) : _repository = repository {
     _initializeSampleData();
+    _loadFromRemote();
+  }
+
+  Future<void> _loadFromRemote() async {
+    if (_repository == null) return;
+    try {
+      _setLoading(true);
+    final remote = await _repository.fetchBooks();
+      if (remote.isNotEmpty) {
+        _books
+          ..clear()
+          ..addAll(remote);
+      }
+    } catch (e) {
+      _setError('فشل في جلب البيانات السحابية');
+    } finally {
+      _setLoading(false);
+    }
   }
 
   // تهيئة بيانات تجريبية
@@ -131,6 +151,25 @@ class BookService extends ChangeNotifier {
         language: 'ar',
         uploadedBy: 'admin',
         downloadCount: 2800,
+      ),
+      // كتاب تجريبي لملف PDF داخل assets
+      BookModel(
+        id: 'sample',
+        title: 'كتاب تجريبي PDF',
+        author: 'فريق التطوير',
+        description: 'هذا كتاب تجريبي لعرض آلية فتح ملفات PDF المخزنة ضمن مجلد assets.',
+        category: 'التكنولوجيا',
+        coverImageUrl: 'assets/images/sample_cover.png', // ضع صورة لاحقاً بنفس الاسم
+        fileUrl: 'assets/books/sample.pdf',
+        fileType: 'pdf',
+        averageRating: 0.0,
+        totalReviews: 0,
+        createdAt: DateTime.now(),
+        tags: ['تجريبي', 'PDF', 'اختبار'],
+  pageCount: 25,
+        language: 'ar',
+        uploadedBy: 'admin',
+        downloadCount: 0,
       ),
     ]);
 
@@ -244,6 +283,62 @@ class BookService extends ChangeNotifier {
     }
   }
 
+  // مزامنة التقدم من السحابة (Firestore) وإدخاله محلياً
+  Future<ReadingProgressModel?> syncReadingProgressFromRemote(String bookId, String userId) async {
+    if (_repository == null) return getReadingProgress(bookId, userId);
+    try {
+  final remote = await _repository.getProgress(userId, bookId);
+      if (remote != null) {
+        final existingIndex = _readingProgress.indexWhere((p) => p.bookId == bookId && p.userId == userId);
+        if (existingIndex != -1) {
+          _readingProgress[existingIndex] = remote;
+        } else {
+          _readingProgress.add(remote);
+        }
+        notifyListeners();
+      }
+      return remote;
+    } catch (_) {
+      return getReadingProgress(bookId, userId);
+    }
+  }
+
+  // Advanced server-side search wrapper
+  Future<List<BookModel>> fetchBooksAdvanced({
+    String? category,
+    String? author,
+    double? minRating,
+    String? sortBy,
+    int? limit,
+  }) async {
+    if (_repository == null) return [];
+    return await _repository.fetchBooksAdvanced(
+      category: category,
+      author: author,
+      minRating: minRating,
+      sortBy: sortBy,
+      limit: limit,
+    );
+  }
+
+  // User library methods
+  Future<void> addToLibrary(String userId, String bookId, String status) async {
+    if (_repository == null) return;
+    await _repository.addToUserLibrary(userId, bookId, status);
+    notifyListeners();
+  }
+
+  Future<void> removeFromLibrary(String userId, String bookId) async {
+    if (_repository == null) return;
+    await _repository.removeFromUserLibrary(userId, bookId);
+    notifyListeners();
+  }
+
+  Future<List<String>> getLibraryByStatus(String userId, String status) async {
+    if (_repository == null) return [];
+    return await _repository.getUserLibraryByStatus(userId, status);
+  }
+
   // تحديث تقدم القراءة
   Future<void> updateReadingProgress({
     required String bookId,
@@ -251,6 +346,8 @@ class BookService extends ChangeNotifier {
     required int currentPage,
     required int totalPages,
     Duration? additionalReadingTime,
+  Map<String, dynamic>? bookmarks,
+  Map<String, dynamic>? highlights,
   }) async {
     final existingIndex = _readingProgress.indexWhere(
       (progress) => progress.bookId == bookId && progress.userId == userId,
@@ -267,6 +364,8 @@ class BookService extends ChangeNotifier {
         lastReadAt: DateTime.now(),
         readingTime: existing.readingTime + newReadingTime,
         isCompleted: currentPage >= totalPages,
+        bookmarks: bookmarks ?? existing.bookmarks,
+        highlights: highlights ?? existing.highlights,
       );
     } else {
       // إنشاء تقدم جديد
@@ -280,11 +379,113 @@ class BookService extends ChangeNotifier {
           lastReadAt: DateTime.now(),
           readingTime: newReadingTime,
           isCompleted: currentPage >= totalPages,
+          bookmarks: bookmarks ?? const {},
+          highlights: highlights ?? const {},
         ),
       );
     }
 
     notifyListeners();
+
+    // تحديث سحابي إن توفر مستودع
+    try {
+      await _repository?.updateProgressData(
+        userId: userId,
+        bookId: bookId,
+        currentPage: currentPage,
+        totalPages: totalPages,
+        additionalReadingTime: additionalReadingTime,
+        bookmarks: bookmarks,
+        highlights: highlights,
+      );
+    } catch (_) {}
+  }
+
+  // ===== إدارة العلامات المرجعية =====
+  Future<void> addBookmark({
+    required String bookId,
+    required String userId,
+    required int page,
+    String? note,
+  }) async {
+    final progress = getReadingProgress(bookId, userId);
+    final updatedBookmarks = Map<String, dynamic>.from(progress?.bookmarks ?? {});
+    updatedBookmarks[page.toString()] = note ?? '';
+    await updateReadingProgress(
+      bookId: bookId,
+      userId: userId,
+      currentPage: progress?.currentPage ?? page,
+      totalPages: progress?.totalPages ?? 0,
+      bookmarks: updatedBookmarks,
+      highlights: progress?.highlights,
+    );
+  }
+
+  Future<void> removeBookmark({
+    required String bookId,
+    required String userId,
+    required int page,
+  }) async {
+    final progress = getReadingProgress(bookId, userId);
+    if (progress == null) return;
+    final updatedBookmarks = Map<String, dynamic>.from(progress.bookmarks);
+    updatedBookmarks.remove(page.toString());
+    await updateReadingProgress(
+      bookId: bookId,
+      userId: userId,
+      currentPage: progress.currentPage,
+      totalPages: progress.totalPages,
+      bookmarks: updatedBookmarks,
+      highlights: progress.highlights,
+    );
+  }
+
+  // ===== إدارة الإبرازات البسيطة (تخزين النص) =====
+  Future<void> addHighlight({
+    required String bookId,
+    required String userId,
+    required int page,
+    required String text,
+  }) async {
+    final progress = getReadingProgress(bookId, userId);
+    final updatedHighlights = Map<String, dynamic>.from(progress?.highlights ?? {});
+    final pageKey = page.toString();
+    final List list = List.from(updatedHighlights[pageKey] ?? []);
+    list.add(text);
+    updatedHighlights[pageKey] = list;
+    await updateReadingProgress(
+      bookId: bookId,
+      userId: userId,
+      currentPage: progress?.currentPage ?? page,
+      totalPages: progress?.totalPages ?? 0,
+      bookmarks: progress?.bookmarks,
+      highlights: updatedHighlights,
+    );
+  }
+
+  Future<void> removeHighlight({
+    required String bookId,
+    required String userId,
+    required int page,
+    required int index,
+  }) async {
+    final progress = getReadingProgress(bookId, userId);
+    if (progress == null) return;
+    final updatedHighlights = Map<String, dynamic>.from(progress.highlights);
+    final pageKey = page.toString();
+    final List list = List.from(updatedHighlights[pageKey] ?? []);
+    if (index >= 0 && index < list.length) {
+      list.removeAt(index);
+      updatedHighlights[pageKey] = list;
+      await updateReadingProgress(
+        bookId: bookId,
+        userId: userId,
+        currentPage: progress.currentPage,
+        totalPages: progress.totalPages,
+        bookmarks: progress.bookmarks,
+        highlights: updatedHighlights,
+      );
+    }
   }
 
   // الحصول على الكتب قيد القراءة
@@ -343,6 +544,7 @@ class BookService extends ChangeNotifier {
         downloadCount: _books[bookIndex].downloadCount + 1,
       );
       notifyListeners();
+  try { await _repository?.incrementDownload(bookId); } catch (_) {}
     }
   }
 

@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/book_model.dart';
-import '../../models/reading_progress_model.dart';
 import '../../services/book_service.dart';
-import '../../services/simple_auth_service.dart';
+import '../../services/auth_firebase_service.dart';
 
 class SimpleBookReaderScreen extends StatefulWidget {
   final BookModel book;
@@ -22,6 +21,8 @@ class _SimpleBookReaderScreenState extends State<SimpleBookReaderScreen> {
   bool _showControls = true;
   final PageController _pageController = PageController();
   late DateTime _readingStartTime;
+  Map<String, dynamic> _bookmarks = {};
+  Map<String, dynamic> _highlights = {}; // page -> List<String>
 
   @override
   void initState() {
@@ -37,17 +38,19 @@ class _SimpleBookReaderScreenState extends State<SimpleBookReaderScreen> {
   }
 
   void _loadSavedProgress() {
-    final authService = Provider.of<SimpleAuthService>(context, listen: false);
+  final authService = Provider.of<AuthFirebaseService>(context, listen: false);
     final bookService = Provider.of<BookService>(context, listen: false);
     
     final progress = bookService.getReadingProgress(
       widget.book.id,
-      authService.currentUser ?? '',
+      authService.currentUser?.uid ?? '',
     );
 
     if (progress != null) {
       setState(() {
         _currentPage = progress.currentPage;
+  _bookmarks = Map<String, dynamic>.from(progress.bookmarks);
+  _highlights = Map<String, dynamic>.from(progress.highlights);
       });
       _pageController.animateToPage(
         _currentPage - 1,
@@ -58,18 +61,20 @@ class _SimpleBookReaderScreenState extends State<SimpleBookReaderScreen> {
   }
 
   void _saveProgress() {
-    final authService = Provider.of<SimpleAuthService>(context, listen: false);
+  final authService = Provider.of<AuthFirebaseService>(context, listen: false);
     final bookService = Provider.of<BookService>(context, listen: false);
     
-    if (authService.currentUser != null) {
+  if (authService.currentUser != null) {
       final readingTime = DateTime.now().difference(_readingStartTime);
       
       bookService.updateReadingProgress(
         bookId: widget.book.id,
-        userId: authService.currentUser!,
+    userId: authService.currentUser!.uid,
         currentPage: _currentPage,
         totalPages: widget.book.pageCount,
         additionalReadingTime: readingTime,
+  bookmarks: _bookmarks,
+  highlights: _highlights,
       );
     }
   }
@@ -164,6 +169,7 @@ class _SimpleBookReaderScreenState extends State<SimpleBookReaderScreen> {
                       ),
                     ),
                   ),
+                  if (_showControls) _pageNotesBar(index + 1),
                   if (_showControls) ...[
                     const SizedBox(height: 20),
                     Text(
@@ -254,6 +260,13 @@ class _SimpleBookReaderScreenState extends State<SimpleBookReaderScreen> {
                           iconSize: 28,
                         ),
                         IconButton(
+                          onPressed: () {
+                            _addHighlightDialog();
+                          },
+                          icon: const Icon(Icons.highlight),
+                          iconSize: 28,
+                        ),
+                        IconButton(
                           onPressed: _currentPage < widget.book.pageCount ? _nextPage : null,
                           icon: const Icon(Icons.chevron_left),
                           iconSize: 32,
@@ -265,6 +278,67 @@ class _SimpleBookReaderScreenState extends State<SimpleBookReaderScreen> {
               ),
             )
           : null,
+    );
+  }
+
+  Widget _pageNotesBar(int page) {
+    final hasBookmark = _bookmarks.containsKey(page.toString());
+    final highlights = List<String>.from(_highlights[page.toString()] ?? []);
+    if (!hasBookmark && highlights.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (hasBookmark)
+            Row(
+              children: [
+                const Icon(Icons.bookmark, color: Colors.amber, size: 18),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    _bookmarks[page.toString()]?.toString().isEmpty == true
+                        ? 'علامة مرجعية'
+                        : _bookmarks[page.toString()].toString(),
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'إزالة',
+                  onPressed: () {
+                    setState(() {
+                      _bookmarks.remove(page.toString());
+                    });
+                    _saveProgress();
+                  },
+                  icon: const Icon(Icons.close, size: 16),
+                )
+              ],
+            ),
+          if (highlights.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                for (var i = 0; i < highlights.length; i++)
+                  Chip(
+                    label: Text(highlights[i], style: const TextStyle(fontSize: 11)),
+                    deleteIcon: const Icon(Icons.close, size: 14),
+                    onDeleted: () {
+                      setState(() {
+                        final list = List<String>.from(highlights);
+                        list.removeAt(i);
+                        _highlights[page.toString()] = list;
+                      });
+                      _saveProgress();
+                    },
+                  )
+              ],
+            )
+          ]
+        ],
+      ),
     );
   }
 
@@ -440,21 +514,33 @@ class _SimpleBookReaderScreenState extends State<SimpleBookReaderScreen> {
           height: 300,
           child: ListView(
             children: [
-              ListTile(
-                leading: const Icon(Icons.bookmark),
-                title: Text('الصفحة $_currentPage'),
-                subtitle: const Text('الآن'),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete),
-                  onPressed: () {
-                    // TODO: حذف العلامة المرجعية
-                  },
+              if (_bookmarks.isEmpty)
+                const ListTile(
+                  leading: Icon(Icons.info_outline),
+                  title: Text('لا توجد علامات مرجعية'),
                 ),
-                onTap: () {
-                  Navigator.pop(context);
-                },
-              ),
-              // TODO: إضافة العلامات المرجعية المحفوظة
+              ..._bookmarks.entries.map((e) {
+                final page = int.tryParse(e.key) ?? 0;
+                return ListTile(
+                  leading: const Icon(Icons.bookmark, color: Colors.amber),
+                  title: Text('صفحة $page'),
+                  subtitle: e.value.toString().isEmpty ? null : Text(e.value.toString()),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete),
+                    onPressed: () {
+                      setState(() {
+                        _bookmarks.remove(e.key);
+                      });
+                      Navigator.pop(context);
+                      _saveProgress();
+                    },
+                  ),
+                  onTap: () {
+                    _goToPage(page);
+                    Navigator.pop(context);
+                  },
+                );
+              })
             ],
           ),
         ),
@@ -465,15 +551,47 @@ class _SimpleBookReaderScreenState extends State<SimpleBookReaderScreen> {
           ),
           ElevatedButton(
             onPressed: () {
-              // TODO: إضافة علامة مرجعية جديدة
+              setState(() {
+                _bookmarks[_currentPage.toString()] = '';
+              });
+              _saveProgress();
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('تمت إضافة علامة مرجعية للصفحة $_currentPage'),
-                ),
-              );
             },
             child: const Text('إضافة علامة'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _addHighlightDialog() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('إضافة إبراز'),
+        content: TextField(
+          controller: controller,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            hintText: 'النص الذي تريد إبرازه',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
+          ElevatedButton(
+            onPressed: () {
+              if (controller.text.trim().isEmpty) return;
+              setState(() {
+                final list = List<String>.from(_highlights[_currentPage.toString()] ?? []);
+                list.add(controller.text.trim());
+                _highlights[_currentPage.toString()] = list;
+              });
+              _saveProgress();
+              Navigator.pop(context);
+            },
+            child: const Text('حفظ'),
           ),
         ],
       ),

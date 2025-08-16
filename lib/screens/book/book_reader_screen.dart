@@ -1,20 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
-import 'package:epub_viewer/epub_viewer.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart' show rootBundle;
 import '../../models/book_model.dart';
 import '../../services/book_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/auth_firebase_service.dart';
+import '../../services/theme_service.dart';
 
 class BookReaderScreen extends StatefulWidget {
   final BookModel? book;
   
-  const BookReaderScreen({Key? key, this.book}) : super(key: key);
+  const BookReaderScreen({super.key, this.book});
 
   @override
-  _BookReaderScreenState createState() => _BookReaderScreenState();
+  @override
+  State<BookReaderScreen> createState() => _BookReaderScreenState();
 }
 
 class _BookReaderScreenState extends State<BookReaderScreen> {
@@ -23,12 +27,53 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
   int _currentPage = 1;
   int _totalPages = 0;
   double _progress = 0.0;
+  // تمت إزالة دعم Syncfusion مؤقتاً بسبب تعارض الإصدارات مع intl
+  // PdfViewerController _pdfController = PdfViewerController(); // معطل حالياً
 
   @override
   void initState() {
     super.initState();
     if (widget.book != null) {
       _downloadAndOpenBook();
+      // بعد الإطار الأول لضمان توافر Providers
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadRemoteReadingProgress();
+      });
+    }
+  }
+
+  Future<void> _loadRemoteReadingProgress() async {
+    final book = widget.book;
+    if (book == null || !mounted) return;
+
+    // محاولة الحصول على المستخدم من Firebase أولاً ثم من الخدمة البسيطة
+    String? userId;
+    try {
+      final firebaseAuth = Provider.of<AuthFirebaseService>(context, listen: false);
+      userId = firebaseAuth.currentUser?.uid;
+    } catch (_) {
+      // قد لا يكون مسجلاً
+    }
+    if (userId == null) {
+      try {
+        final legacyAuth = Provider.of<AuthService>(context, listen: false);
+        userId = legacyAuth.currentUser?.uid;
+      } catch (_) {}
+    }
+    if (userId == null) return; // لا يوجد مستخدم
+
+    try {
+      final bookService = Provider.of<BookService>(context, listen: false);
+      final remote = await bookService.syncReadingProgressFromRemote(book.id, userId);
+      if (remote != null && mounted) {
+        setState(() {
+          _currentPage = remote.currentPage.clamp(1, remote.totalPages).toInt();
+          _totalPages = remote.totalPages; // قد تُحدث لاحقاً عند onRender
+          _progress = remote.progressPercentage;
+        });
+      }
+    } catch (e) {
+      // تجاهل الخطأ بصمت الآن؛ يمكن لاحقاً إضافة Snackbar
     }
   }
 
@@ -38,16 +83,29 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
         _isLoading = true;
       });
 
-      // تنزيل الملف إذا لم يكن موجوداً محلياً
-      final directory = await getApplicationDocumentsDirectory();
-      final fileName = '${widget.book!.id}.${widget.book!.fileType}';
-      final localFile = File('${directory.path}/$fileName');
-
-      if (!await localFile.exists()) {
-        // لأغراض التجربة، سنتجاهل التحميل الفعلي
-        // يمكن إضافة ملفات تجريبية في مجلد assets
-        throw 'ميزة تحميل الكتب قيد التطوير';
+      if (kIsWeb) {
+        // على الويب: سنعرض رسالة أن التحميل المحلي غير مطلوب حالياً
+        setState(() {
+          _localFilePath = widget.book!.fileUrl; // سيُستخدم رمزياً
+          _isLoading = false;
+        });
+        return;
       }
+
+      // نسخة من ملف PDF الموجود في assets إلى مجلد مؤقت
+      final assetPath = widget.book!.fileUrl; // مثال: assets/books/sample.pdf
+      if (!assetPath.toLowerCase().endsWith('.pdf')) {
+        throw 'فقط ملفات PDF مدعومة حالياً في النسخة التجريبية';
+      }
+
+      // قراءة البايتات من الأصول
+      final data = await rootBundle.load(assetPath);
+      final bytes = data.buffer.asUint8List();
+
+      final directory = await getApplicationDocumentsDirectory();
+      final fileName = assetPath.split('/').last;
+      final localFile = File('${directory.path}/$fileName');
+      await localFile.writeAsBytes(bytes, flush: true);
 
       setState(() {
         _localFilePath = localFile.path;
@@ -77,14 +135,24 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
         });
 
         // حفظ التقدم في القراءة
-        final authService = Provider.of<AuthService>(context, listen: false);
+        // تفضيل Firebase Auth إن وُجد وإلا fallback إلى AuthService
+        String? userId;
+        try {
+          final firebaseAuth = Provider.of<AuthFirebaseService>(context, listen: false);
+          userId = firebaseAuth.currentUser?.uid;
+        } catch (_) {}
+        if (userId == null) {
+          final legacy = Provider.of<AuthService>(context, listen: false);
+          userId = legacy.currentUser?.uid;
+        }
         final bookService = Provider.of<BookService>(context, listen: false);
         
-        if (authService.currentUser != null && widget.book != null) {
+        if (userId != null && widget.book != null) {
           bookService.updateReadingProgress(
-            authService.currentUser!.uid,
-            widget.book!.id,
-            newProgress,
+            bookId: widget.book!.id,
+            userId: userId,
+            currentPage: _currentPage,
+            totalPages: _totalPages,
           );
         }
       }
@@ -156,6 +224,29 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
   }
 
   Widget _buildPDFReader() {
+    if (kIsWeb) {
+      // Placeholder للويب حتى نعيد دمج syncfusion أو بديل متوافق
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.picture_as_pdf, size: 72, color: Colors.grey),
+            const SizedBox(height: 16),
+            Text(
+              'عرض PDF في الويب قيد التعليق مؤقتاً',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'تم تعطيل الحزمة بسبب تعارض الإصدارات (intl). سنعيد التفعيل لاحقاً.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+            ),
+          ],
+        ),
+      );
+    }
+    // المنصات الأخرى: الاستمرار باستخدام flutter_pdfview
     return PDFView(
       filePath: _localFilePath!,
       enableSwipe: true,
@@ -177,7 +268,7 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
         _updateProgress();
       },
       onError: (error) {
-        print('خطأ في PDF: $error');
+        debugPrint('خطأ في PDF: $error');
       },
     );
   }
@@ -285,16 +376,16 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
             ),
             const SizedBox(height: 20),
             
-            ListTile(
-              leading: const Icon(Icons.brightness_6),
-              title: const Text('وضع القراءة الليلي'),
-              trailing: Switch(
-                value: Theme.of(context).brightness == Brightness.dark,
-                onChanged: (value) {
-                  // TODO: تغيير السمة
-                },
-              ),
-            ),
+                   ListTile(
+                     leading: const Icon(Icons.brightness_6),
+                     title: const Text('وضع القراءة الليلي'),
+                     trailing: Consumer<ThemeService>(
+                       builder: (context, themeService, child) => Switch(
+                         value: themeService.isDark,
+                         onChanged: (value) => themeService.toggle(),
+                       ),
+                     ),
+                   ),
             
             ListTile(
               leading: const Icon(Icons.text_fields),

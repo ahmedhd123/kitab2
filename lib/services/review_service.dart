@@ -8,13 +8,25 @@ class ReviewService extends ChangeNotifier {
   // إضافة مراجعة جديدة
   Future<void> addReview(ReviewModel review) async {
     try {
-      await _firestore.collection('reviews').add(review.toMap());
+      // Prevent duplicate: if user already reviewed this book, update instead
+      final existing = await _firestore
+          .collection('reviews')
+          .where('userId', isEqualTo: review.userId)
+          .where('bookId', isEqualTo: review.bookId)
+          .limit(1)
+          .get();
+      if (existing.docs.isNotEmpty) {
+        final docId = existing.docs.first.id;
+        await _firestore.collection('reviews').doc(docId).update(review.toMap());
+      } else {
+        await _firestore.collection('reviews').add(review.toMap());
+      }
       
       // تحديث متوسط التقييم للكتاب
       await _updateBookAverageRating(review.bookId);
     } catch (e) {
       print('خطأ في إضافة المراجعة: $e');
-      throw e;
+      rethrow;
     }
   }
 
@@ -48,7 +60,7 @@ class ReviewService extends ChangeNotifier {
       await _updateBookAverageRating(updatedReview.bookId);
     } catch (e) {
       print('خطأ في تحديث المراجعة: $e');
-      throw e;
+      rethrow;
     }
   }
 
@@ -61,7 +73,7 @@ class ReviewService extends ChangeNotifier {
       await _updateBookAverageRating(bookId);
     } catch (e) {
       print('خطأ في حذف المراجعة: $e');
-      throw e;
+      rethrow;
     }
   }
 

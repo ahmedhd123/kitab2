@@ -59,6 +59,33 @@ class ReviewModel {
     };
   }
 
+  // إنشاء من مستند Firestore
+  factory ReviewModel.fromFirestore(dynamic doc) {
+    final data = (doc is Map<String, dynamic>) ? doc : (doc.data() as Map<String, dynamic>);
+    return ReviewModel(
+      id: doc is Map<String, dynamic> ? (data['id'] ?? '') : (doc.id ?? data['id'] ?? ''),
+      bookId: data['bookId'] ?? '',
+      userId: data['userId'] ?? '',
+      userName: data['userName'] ?? '',
+      userPhotoUrl: data['userPhotoUrl'] ?? '',
+      rating: (data['rating'] ?? 0.0).toDouble(),
+      comment: data['comment'] ?? '',
+      createdAt: _parseDate(data['createdAt']),
+      updatedAt: data['updatedAt'] != null ? _parseDate(data['updatedAt']) : null,
+      likes: List<String>.from(data['likes'] ?? []),
+      dislikes: List<String>.from(data['dislikes'] ?? []),
+    );
+  }
+
+  static DateTime _parseDate(dynamic value) {
+    if (value == null) return DateTime.now();
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
+    // دعم Timestamp الخاص بـ Firestore دون استيراد مباشر لتجنب الأخطاء أثناء عدم توفر الحزمة
+    final ts = value.toString();
+    return DateTime.tryParse(ts) ?? DateTime.now();
+  }
+
   // عدد الإعجابات
   int get likesCount => likes.length;
 
