@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:async';
 import 'package:provider/provider.dart';
 import '../../models/book_model.dart';
 import '../../services/book_service.dart';
@@ -10,6 +11,10 @@ import 'simple_book_reader_screen.dart';
 import '../auth/simple_login_screen.dart';
 import '../../widgets/safe_image.dart';
 import '../../utils/design_tokens.dart';
+import '../../firebase_options.dart';
+import 'package:firebase_core/firebase_core.dart' show FirebaseException;
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:html' as html;
 
 // شاشة تفاصيل الكتاب (نسخة نظيفة بعد التنظيف)
 class BookDetailsScreen extends StatefulWidget {
@@ -21,6 +26,19 @@ class BookDetailsScreen extends StatefulWidget {
 }
 
 class _BookDetailsScreenState extends State<BookDetailsScreen> {
+  Future<List<ReviewModel>>? _reviewsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadReviews();
+  }
+
+  void _loadReviews() {
+    _reviewsFuture = Provider.of<ReviewService>(context, listen: false).getBookReviews(widget.book.id);
+    // trigger rebuild
+    if (mounted) setState(() {});
+  }
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -89,6 +107,14 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
                   }
                 },
               );
+            },
+          ),
+          // Diagnostic button: open a small Firestore read/test to show full exception
+          IconButton(
+            tooltip: 'تشخيص Firestore',
+            icon: const Icon(Icons.bug_report, color: Colors.white),
+            onPressed: () async {
+              await _runFirestoreDiagnostic();
             },
           ),
           // المكتبة والمراجعات
@@ -182,22 +208,136 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
                     style: TextStyle(color: Colors.white.withOpacity(.92), fontSize: 14, fontWeight: FontWeight.w500)),
               ],
             ),
-          )
+          ),
         ]),
       ),
     );
   }
 
-  Widget _buildMetaSection() => Wrap(
-        spacing: 14,
-        runSpacing: 14,
-        children: [
-          _metaItem(Icons.category_outlined, widget.book.category),
-          _metaItem(Icons.language, widget.book.language.toUpperCase()),
-          _metaItem(Icons.insert_drive_file_outlined, widget.book.fileType.toUpperCase()),
-          _metaItem(Icons.pages_outlined, '${widget.book.pageCount} صفحة'),
-        ],
+  // تشغيل تشخيص بسيط على Firestore (قراءة مستند اختبار) وعرض النتيجة/الاستثناء في مودال
+  Future<void> _runFirestoreDiagnostic() async {
+    // show progress dialog
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const AlertDialog(
+        content: SizedBox(height: 80, child: Center(child: CircularProgressIndicator())),
+      ),
+    );
+
+    try {
+      // Quick browser-level online check
+      final online = html.window.navigator.onLine;
+      if (online != true) {
+        Navigator.of(context).pop();
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Firestore diagnostic — offline'),
+            content: const Text('المتصفح حاليا في وضع عدم الاتصال (navigator.onLine = false). تحقق من اتصال الإنترنت أو إعدادات DevTools.'),
+            actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('OK'))],
+          ),
+        );
+        return;
+      }
+
+      // Programmatic HTTP checks to distinguish network/firewall/CORS issues
+      String googlePing = '<not attempted>';
+      String firestorePing = '<not attempted>';
+      try {
+        final g = await html.HttpRequest.request('https://www.google.com/generate_204', method: 'GET', requestHeaders: {}, withCredentials: false);
+        googlePing = 'status=${g.status}';
+      } catch (e) {
+        googlePing = 'error=${e.toString()}';
+      }
+      try {
+        final fs = await html.HttpRequest.request('https://firestore.googleapis.com/', method: 'GET', requestHeaders: {}, withCredentials: false);
+        firestorePing = 'status=${fs.status}, len=${fs.responseText?.length ?? 0}';
+      } catch (e) {
+        firestorePing = 'error=${e.toString()}';
+      }
+
+      final firestore = FirebaseFirestore.instance;
+      // try to read a small doc (does not need to exist) with timeout
+      final doc = await firestore.collection('diagnostics').doc('ping').get().timeout(const Duration(seconds: 10));
+      Navigator.of(context).pop(); // close progress
+
+      final content = doc.exists ? doc.data().toString() : 'Document not found (collection: diagnostics, doc: ping)';
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Firestore diagnostic — success'),
+          content: SingleChildScrollView(child: Text('$content\n\ngooglePing: $googlePing\nfirestorePing: $firestorePing')),
+          actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('OK'))],
+        ),
       );
+      return;
+    } on TimeoutException catch (_) {
+      // read timed out — try a quick write which often yields immediate FirebaseException with details
+      try {
+  final online2 = html.window.navigator.onLine;
+  if (online2 != true) throw Exception('Browser offline (navigator.onLine = false)');
+        final firestore = FirebaseFirestore.instance;
+        await firestore.collection('diagnostics').doc('ping').set({'ts': FieldValue.serverTimestamp()}).timeout(const Duration(seconds: 12));
+        Navigator.of(context).pop();
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Firestore diagnostic — write success'),
+            content: const Text('تمت كتابة مستند الاختبار بنجاح (collection: diagnostics, doc: ping).'),
+            actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('OK'))],
+          ),
+        );
+        return;
+      } on TimeoutException catch (_) {
+        Navigator.of(context).pop();
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Firestore diagnostic — timeout'),
+            content: const Text('انتهت مهلة الشبكة أثناء محاولة الوصول إلى Firestore.'),
+            actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('OK'))],
+          ),
+        );
+        return;
+      } catch (e, st) {
+        Navigator.of(context).pop();
+        String body;
+        if (e is FirebaseException) {
+          body = 'FirebaseException: code=${e.code}\nmessage=${e.message}\n\nstack:\n${st.toString()}';
+        } else {
+          body = 'Exception: ${e.toString()}\n\nstack:\n${st.toString()}';
+        }
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Firestore diagnostic — write error'),
+            content: SingleChildScrollView(child: Text(body)),
+            actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('OK'))],
+          ),
+        );
+        return;
+      }
+    } catch (e, st) {
+      Navigator.of(context).pop();
+      String body;
+      if (e is FirebaseException) {
+        body = 'FirebaseException: code=${e.code}\nmessage=${e.message}\n\nstack:\n${st.toString()}';
+      } else {
+        body = 'Exception: ${e.toString()}\n\nstack:\n${st.toString()}';
+      }
+
+      // show detailed error so user can paste it here
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Firestore diagnostic — error'),
+          content: SingleChildScrollView(child: Text(body)),
+          actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('OK'))],
+        ),
+      );
+    }
+  }
 
   Widget _metaItem(IconData icon, String label) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -212,6 +352,17 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
           Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
         ]),
       );
+
+    Widget _buildMetaSection() => Wrap(
+          spacing: 14,
+          runSpacing: 14,
+          children: [
+            _metaItem(Icons.category_outlined, widget.book.category),
+            _metaItem(Icons.language, widget.book.language.toUpperCase()),
+            _metaItem(Icons.insert_drive_file_outlined, widget.book.fileType.toUpperCase()),
+            _metaItem(Icons.pages_outlined, '${widget.book.pageCount} صفحة'),
+          ],
+        );
 
   Widget _buildProgressSection() => Consumer2<BookService, AuthFirebaseService>(
         builder: (context, service, auth, _) {
@@ -402,58 +553,99 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
   // (أزلنا دوال معلومات/إحصائيات/تحميل قديمة غير مستخدمة الآن)
 
   // عرض حوار إضافة مراجعة
-  void _showReviewDialog() {
+  Future<void> _showReviewDialog() async {
     double rating = 5.0;
     final TextEditingController _commentController = TextEditingController();
+    bool isSending = false;
 
-    showDialog<void>(
+    await showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('أضف مراجعة'),
-        content: StatefulBuilder(builder: (context, setState) {
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(5, (i) {
-                  final idx = i + 1;
-                  return IconButton(
-                    icon: Icon(idx <= rating ? Icons.star : Icons.star_border, color: Colors.amber),
-                    onPressed: () => setState(() => rating = idx.toDouble()),
-                  );
-                }),
+      barrierDismissible: false,
+      builder: (ctx) {
+        return StatefulBuilder(builder: (dialogCtx, dialogSetState) {
+          return AlertDialog(
+            title: const Text('أضف مراجعة'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(5, (i) {
+                    final idx = i + 1;
+                    return IconButton(
+                      icon: Icon(idx <= rating ? Icons.star : Icons.star_border, color: Colors.amber),
+                      onPressed: isSending ? null : () => dialogSetState(() => rating = idx.toDouble()),
+                    );
+                  }),
+                ),
+                TextField(
+                  controller: _commentController,
+                  maxLines: 4,
+                  decoration: const InputDecoration(hintText: 'اكتب تعليقك...'),
+                  enabled: !isSending,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: isSending ? null : () => Navigator.of(dialogCtx).pop(),
+                child: const Text('إلغاء'),
               ),
-              TextField(
-                controller: _commentController,
-                maxLines: 4,
-                decoration: const InputDecoration(hintText: 'اكتب تعليقك...'),
+              ElevatedButton(
+                onPressed: isSending
+                    ? null
+                    : () async {
+                        final comment = _commentController.text.trim();
+                        dialogSetState(() => isSending = true);
+                        bool success = false;
+                        try {
+                          success = await _submitReview(rating, comment);
+                        } finally {
+                          dialogSetState(() => isSending = false);
+                        }
+
+                        if (success) {
+                          _loadReviews();
+                          if (mounted) Navigator.of(dialogCtx).pop();
+                        }
+                      },
+                child: isSending
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Text('إرسال'),
               ),
             ],
           );
-        }),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('إلغاء')),
-          ElevatedButton(
-            onPressed: () async {
-              final comment = _commentController.text.trim();
-              await _submitReview(rating, comment);
-              Navigator.pop(context);
-            },
-            child: const Text('إرسال'),
-          ),
-        ],
-      ),
+        });
+      },
     );
+
+    // dispose controller after dialog is closed
+    _commentController.dispose();
   }
 
   // إرسال المراجعة إلى الخدمة (upsert)
-  Future<void> _submitReview(double rating, String comment) async {
+  Future<bool> _submitReview(double rating, String comment) async {
+    // Quick sanity check: if firebase_options.dart contains placeholders, skip network call
+    try {
+      final opts = DefaultFirebaseOptions.currentPlatform;
+  final key = opts.apiKey;
+  final project = opts.projectId;
+  // common placeholder patterns
+  final isPlaceholder = key.isEmpty || project.isEmpty || key.contains('YOUR_') || key.contains('API_KEY') || project.contains('YOUR_PROJECT');
+  if (isPlaceholder) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Firebase غير مكوّن محلياً — شغّل flutterfire configure')));
+        return false;
+      }
+    } catch (_) {
+      // If firebase_options isn't present or malformed, avoid calling network
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Firebase غير مكوّن — تحقق من ملف firebase_options.dart')));
+      return false;
+    }
     final auth = Provider.of<AuthFirebaseService>(context, listen: false);
     final user = auth.currentUser;
     if (user == null) {
       Navigator.push(context, MaterialPageRoute(builder: (_) => const SimpleLoginScreen()));
-      return;
+      return false;
     }
 
     final review = ReviewModel(
@@ -468,10 +660,20 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
     );
 
     try {
-      await Provider.of<ReviewService>(context, listen: false).addReview(review);
+      // Protect the network call with a timeout to avoid indefinite hanging on web when config is wrong
+      await Provider.of<ReviewService>(context, listen: false)
+          .addReview(review)
+          .timeout(const Duration(seconds: 12));
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تمت إضافة المراجعة')));
+      return true;
+    } on TimeoutException catch (_) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('انتهت مهلة الشبكة. تحقق من إعدادات Firebase أو اتصال الإنترنت')));
+      return false;
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('فشل في إضافة المراجعة')));
+      // Prefer concise, actionable messages
+      final msg = (e is FirebaseException && e.message != null) ? e.message! : e.toString();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('فشل في إضافة المراجعة: ${msg.length > 200 ? msg.substring(0, 200) + '...' : msg}')));
+      return false;
     }
   }
 
@@ -481,15 +683,14 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
       children: [
         Text('المراجعات', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 12),
-        FutureBuilder(
-          future: Provider.of<ReviewService>(context, listen: false).getBookReviews(widget.book.id),
+        FutureBuilder<List<ReviewModel>>(
+          future: _reviewsFuture,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-            final reviews = snapshot.data as List<dynamic>? ?? [];
+            final reviews = snapshot.data ?? [];
             if (reviews.isEmpty) return const Text('لا توجد مراجعات بعد');
             return Column(
-              children: reviews.map((r) {
-                final rev = r as ReviewModel;
+              children: reviews.map((rev) {
                 return ListTile(
                   leading: CircleAvatar(child: Text(rev.userName.isNotEmpty ? rev.userName[0] : '?')),
                   title: Text(rev.userName),

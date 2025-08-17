@@ -1,0 +1,2 @@
+// shim to support tools that expect settings.gradle
+apply from: file('settings.gradle.kts')

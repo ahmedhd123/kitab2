@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../services/simple_auth_service.dart';
+import '../../services/auth_firebase_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -69,13 +69,13 @@ class HomePage extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () async {
-              final authService = Provider.of<SimpleAuthService>(context, listen: false);
+              final authService = Provider.of<AuthFirebaseService>(context, listen: false);
               await authService.signOut();
             },
           ),
         ],
       ),
-      body: Consumer<SimpleAuthService>(
+      body: Consumer<AuthFirebaseService>(
         builder: (context, authService, child) {
           return Center(
             child: Column(
@@ -95,7 +95,7 @@ class HomePage extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'مرحباً، ${authService.currentUser?.split('@')[0] ?? 'القارئ'}',
+                  'مرحباً، ${authService.currentUser?.displayName ?? authService.currentUser?.email?.split('@').first ?? 'القارئ'}',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 30),
@@ -205,7 +205,7 @@ class ProfilePage extends StatelessWidget {
         backgroundColor: Theme.of(context).primaryColor,
         foregroundColor: Colors.white,
       ),
-      body: Consumer<SimpleAuthService>(
+      body: Consumer<AuthFirebaseService>(
         builder: (context, authService, child) {
           return Center(
             child: Column(
@@ -225,7 +225,7 @@ class ProfilePage extends StatelessWidget {
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  'البريد الإلكتروني: ${authService.currentUser ?? 'غير محدد'}',
+                  'البريد الإلكتروني: ${authService.currentUser?.email ?? 'غير محدد'}',
                   style: const TextStyle(fontSize: 16),
                 ),
                 const SizedBox(height: 30),

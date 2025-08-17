@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart';
+import 'package:collection/collection.dart';
+import 'dart:async';
 import '../models/book_model.dart';
 import '../models/reading_progress_model.dart';
 import 'book_repository.dart';
@@ -8,6 +10,10 @@ class BookService extends ChangeNotifier {
   final List<ReadingProgressModel> _readingProgress = [];
   final List<String> _savedBooks = [];
   final BookRepository? _repository; // مستودع Firestore اختياري
+  // حالة المزامنة لكل (userId, bookId) => 'idle'|'syncing'|'success'|'failed'
+  final Map<String, String> _syncStatus = {};
+  // آخر تعارض مُكتشف (local, remote) لكل مفتاح userId_bookId
+  final Map<String, Map<String, ReadingProgressModel>> _conflicts = {};
   
   bool _isLoading = false;
   String? _error;
@@ -62,13 +68,13 @@ class BookService extends ChangeNotifier {
   // تهيئة بيانات تجريبية
   void _initializeSampleData() {
     _books.addAll([
-      BookModel(
+  BookModel(
         id: '1',
         title: 'مئة عام من العزلة',
         author: 'غابرييل غارسيا ماركيز',
         description: 'رواية خيالية من أعمال الأدب العالمي تحكي قصة عائلة بوينديا عبر سبعة أجيال في قرية ماكوندو الخيالية.',
         category: 'الأدب',
-        coverImageUrl: 'assets/books/100_years.jpg',
+  coverImageUrl: 'assets/images/placeholder.png',
         fileUrl: 'assets/books/100_years.pdf',
         fileType: 'pdf',
         averageRating: 4.5,
@@ -80,13 +86,13 @@ class BookService extends ChangeNotifier {
         uploadedBy: 'admin',
         downloadCount: 5600,
       ),
-      BookModel(
+  BookModel(
         id: '2',
         title: 'تاريخ موجز للزمن',
         author: 'ستيفن هوكينغ',
         description: 'كتاب علمي يشرح أسس الفيزياء النظرية والكونيات بطريقة مبسطة للقارئ العادي.',
         category: 'العلوم',
-        coverImageUrl: 'assets/books/brief_history.jpg',
+  coverImageUrl: 'assets/images/placeholder.png',
         fileUrl: 'assets/books/brief_history.pdf',
         fileType: 'pdf',
         averageRating: 4.8,
@@ -98,13 +104,13 @@ class BookService extends ChangeNotifier {
         uploadedBy: 'admin',
         downloadCount: 3400,
       ),
-      BookModel(
+  BookModel(
         id: '3',
         title: 'فن الحرب',
         author: 'سون تزو',
         description: 'كتاب استراتيجي عسكري صيني قديم يحتوي على حكم وأساليب في الحرب والاستراتيجية.',
         category: 'الفلسفة',
-        coverImageUrl: 'assets/books/art_of_war.jpg',
+  coverImageUrl: 'assets/images/placeholder.png',
         fileUrl: 'assets/books/art_of_war.pdf',
         fileType: 'pdf',
         averageRating: 4.3,
@@ -116,13 +122,13 @@ class BookService extends ChangeNotifier {
         uploadedBy: 'admin',
         downloadCount: 8900,
       ),
-      BookModel(
+  BookModel(
         id: '4',
         title: 'البرمجة بلغة Flutter',
         author: 'محمد أحمد',
         description: 'دليل شامل لتعلم تطوير التطبيقات باستخدام Flutter من الصفر حتى الاحتراف.',
         category: 'التكنولوجيا',
-        coverImageUrl: 'assets/books/flutter_programming.jpg',
+  coverImageUrl: 'assets/images/placeholder.png',
         fileUrl: 'assets/books/flutter_programming.pdf',
         fileType: 'pdf',
         averageRating: 4.6,
@@ -134,13 +140,13 @@ class BookService extends ChangeNotifier {
         uploadedBy: 'admin',
         downloadCount: 1200,
       ),
-      BookModel(
+  BookModel(
         id: '5',
         title: 'رحلة ابن بطوطة',
         author: 'ابن بطوطة',
         description: 'كتاب رحلات يصف فيه ابن بطوطة رحلاته عبر العالم الإسلامي في القرن الرابع عشر.',
         category: 'التاريخ',
-        coverImageUrl: 'assets/books/ibn_battuta.jpg',
+  coverImageUrl: 'assets/images/placeholder.png',
         fileUrl: 'assets/books/ibn_battuta.pdf',
         fileType: 'pdf',
         averageRating: 4.4,
@@ -287,18 +293,90 @@ class BookService extends ChangeNotifier {
   Future<ReadingProgressModel?> syncReadingProgressFromRemote(String bookId, String userId) async {
     if (_repository == null) return getReadingProgress(bookId, userId);
     try {
-  final remote = await _repository.getProgress(userId, bookId);
-      if (remote != null) {
+      final key = '${userId}_$bookId';
+      _syncStatus[key] = 'syncing';
+      notifyListeners();
+
+      final remote = await _repository.getProgress(userId, bookId);
+
+      // If no remote exists, nothing to merge — return local
+      final local = getReadingProgress(bookId, userId);
+      if (remote == null) {
+        // if local exists, push it to remote
+        if (local != null) {
+          try {
+            await _repository.upsertProgress(local);
+            _syncStatus[key] = 'success';
+            notifyListeners();
+          } catch (_) {
+            _syncStatus[key] = 'failed';
+            notifyListeners();
+          }
+        } else {
+          _syncStatus[key] = 'success';
+          notifyListeners();
+        }
+        return local;
+      }
+
+      // If local is null, adopt remote
+      if (local == null) {
         final existingIndex = _readingProgress.indexWhere((p) => p.bookId == bookId && p.userId == userId);
         if (existingIndex != -1) {
           _readingProgress[existingIndex] = remote;
         } else {
           _readingProgress.add(remote);
         }
+        _syncStatus[key] = 'success';
         notifyListeners();
+        return remote;
       }
-      return remote;
+
+      // Both exist: optimistic merge — prefer latest lastReadAt and merge readingTime/bookmarks/highlights
+      ReadingProgressModel merged;
+      final cmp = local.lastReadAt.compareTo(remote.lastReadAt);
+      if (cmp == 0) {
+        // identical timestamps: merge fields conservatively
+        merged = _mergeProgress(local, remote);
+      } else if (cmp > 0) {
+        // local is newer
+        merged = _mergeProgress(local, remote, prefer: 'local');
+      } else {
+        // remote is newer
+        merged = _mergeProgress(local, remote, prefer: 'remote');
+      }
+
+      // If merged differs from remote, upsert it
+      final eq = const DeepCollectionEquality().equals(merged.toMap(), remote.toMap());
+      if (!eq) {
+        try {
+          await _repository.upsertProgress(merged);
+          _syncStatus[key] = 'success';
+        } catch (_) {
+          _syncStatus[key] = 'failed';
+        }
+      } else {
+        _syncStatus[key] = 'success';
+      }
+
+      // store merged locally
+      final existingIndex = _readingProgress.indexWhere((p) => p.bookId == bookId && p.userId == userId);
+      if (existingIndex != -1) {
+        _readingProgress[existingIndex] = merged;
+      } else {
+        _readingProgress.add(merged);
+      }
+
+      // conflict detection: if both had changes and lastReadAt differ, save conflict for UI
+      if (local.lastReadAt != remote.lastReadAt && (DateTime.now().difference(local.lastReadAt).inDays < 30 || DateTime.now().difference(remote.lastReadAt).inDays < 30)) {
+        _conflicts[key] = {'local': local, 'remote': remote};
+      }
+
+      notifyListeners();
+      return merged;
     } catch (_) {
+      _syncStatus['${userId}_$bookId'] = 'failed';
+      notifyListeners();
       return getReadingProgress(bookId, userId);
     }
   }
@@ -386,9 +464,11 @@ class BookService extends ChangeNotifier {
     }
 
     notifyListeners();
-
     // تحديث سحابي إن توفر مستودع
     try {
+      final key = '${userId}_$bookId';
+      _syncStatus[key] = 'syncing';
+      notifyListeners();
       await _repository?.updateProgressData(
         userId: userId,
         bookId: bookId,
@@ -398,9 +478,97 @@ class BookService extends ChangeNotifier {
         bookmarks: bookmarks,
         highlights: highlights,
       );
-    } catch (_) {}
+      _syncStatus[key] = 'success';
+      notifyListeners();
+    } catch (_) {
+      final key = '${userId}_$bookId';
+      _syncStatus[key] = 'failed';
+      notifyListeners();
+    }
   }
 
+
+  // Merge helper: combine readingTime and union bookmarks/highlights.
+  ReadingProgressModel _mergeProgress(ReadingProgressModel a, ReadingProgressModel b, {String? prefer}) {
+    // prefer determines which base to take for scalar fields (currentPage, totalPages, isCompleted, lastReadAt)
+    final base = (prefer == 'remote') ? b : a;
+    final other = (identical(base, a)) ? b : a;
+
+    // readingTime: sum of both
+    final combinedReadingTime = Duration(seconds: a.readingTime.inSeconds + b.readingTime.inSeconds);
+
+    // bookmarks: merge maps, remote entries overwrite local if key collision when prefer==remote
+    final mergedBookmarks = Map<String, dynamic>.from(a.bookmarks);
+    b.bookmarks.forEach((k, v) {
+      mergedBookmarks[k] = v;
+    });
+
+    // highlights: merge lists per page
+    final mergedHighlights = <String, dynamic>{};
+    final pages = <String>{}..addAll(a.highlights.keys)..addAll(b.highlights.keys);
+    for (final p in pages) {
+      final listA = List<String>.from(a.highlights[p] ?? []);
+      final listB = List<String>.from(b.highlights[p] ?? []);
+      final mergedList = <String>[]..addAll(listA)..addAll(listB.where((x) => !listA.contains(x)));
+      mergedHighlights[p] = mergedList;
+    }
+
+    return base.copyWith(
+      currentPage: base.currentPage,
+      totalPages: base.totalPages,
+      lastReadAt: base.lastReadAt.isAfter(other.lastReadAt) ? base.lastReadAt : other.lastReadAt,
+      readingTime: combinedReadingTime,
+      isCompleted: base.isCompleted || other.isCompleted,
+      bookmarks: mergedBookmarks,
+      highlights: mergedHighlights,
+    );
+  }
+
+  // Public wrapper for tests or external callers that want to merge two progress entries.
+  ReadingProgressModel mergeProgress(ReadingProgressModel a, ReadingProgressModel b, {String? prefer}) {
+    return _mergeProgress(a, b, prefer: prefer);
+  }
+
+  // Expose sync status for UI
+  String getSyncStatus(String bookId, String userId) => _syncStatus['${userId}_$bookId'] ?? 'idle';
+
+  // Expose conflict if exists
+  Map<String, ReadingProgressModel>? getConflict(String bookId, String userId) => _conflicts['${userId}_$bookId'];
+
+  void clearConflict(String bookId, String userId) {
+    _conflicts.remove('${userId}_$bookId');
+    notifyListeners();
+  }
+
+  // Background sync worker
+  Timer? _bgTimer;
+  bool _bgActive = false;
+
+  /// Start periodic background sync for the given [userId].
+  /// While active, it will attempt to reconcile each local progress entry every [interval].
+  void startBackgroundSync(String userId, {Duration interval = const Duration(seconds: 30)}) {
+    stopBackgroundSync();
+    _bgActive = true;
+    _bgTimer = Timer.periodic(interval, (_) async {
+      // iterate through local progress entries for this user
+      final entries = _readingProgress.where((p) => p.userId == userId).toList();
+      for (final p in entries) {
+        try {
+          await syncReadingProgressFromRemote(p.bookId, userId);
+        } catch (_) {}
+      }
+    });
+    notifyListeners();
+  }
+
+  void stopBackgroundSync() {
+    _bgTimer?.cancel();
+    _bgTimer = null;
+    _bgActive = false;
+    notifyListeners();
+  }
+
+  bool get isBackgroundSyncActive => _bgActive;
   // ===== إدارة العلامات المرجعية =====
   Future<void> addBookmark({
     required String bookId,
@@ -512,10 +680,56 @@ class BookService extends ChangeNotifier {
   Future<void> addBook(BookModel book) async {
     _setLoading(true);
     try {
+      // Add locally
       _books.add(book);
       notifyListeners();
+      // If repository is present, persist remotely as well
+      if (_repository != null) {
+        try {
+          await _repository!.addOrUpdateBook(book);
+        } catch (_) {}
+      }
     } catch (e) {
       _setError('فشل في إضافة الكتاب: $e');
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// Upload bytes and add a new book entry (uploads file to Storage and creates Firestore doc).
+  Future<String?> uploadAndAddBook({
+    required BookModel book,
+    required String fileName,
+    required List<int> bytes,
+    required String contentType,
+  void Function(double progress)? onProgress,
+  }) async {
+    if (_repository == null) {
+      // fallback: just add locally and return null
+      await addBook(book);
+      return null;
+    }
+
+    final bookId = book.id;
+    try {
+      _setLoading(true);
+      final fileUrl = await _repository!.addBookWithFile(
+        bookId: bookId,
+        book: book,
+        fileName: fileName,
+        bytes: bytes,
+        contentType: contentType,
+        onProgress: onProgress,
+      );
+      // update local cache
+      final idx = _books.indexWhere((b) => b.id == bookId);
+      final updated = book.copyWith(fileUrl: fileUrl);
+      if (idx != -1) _books[idx] = updated; else _books.add(updated);
+      notifyListeners();
+      return fileUrl;
+    } catch (e) {
+      _setError('فشل في رفع الكتاب: $e');
+      return null;
     } finally {
       _setLoading(false);
     }

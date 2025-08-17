@@ -7,6 +7,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 // لتوليده، ثم أزل الشرط الوقائي أدناه.
 // import 'firebase_options.dart';
 import 'services/auth_service.dart';
+import 'services/review_service.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
 
@@ -32,6 +33,8 @@ class KitabReaderApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthService()),
+        // Provide ReviewService so review UI works across entrypoints
+        ChangeNotifierProvider(create: (_) => ReviewService()),
       ],
       child: MaterialApp(
         title: 'قارئ الكتب',

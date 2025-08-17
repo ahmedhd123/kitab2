@@ -24,8 +24,13 @@ class ReviewService extends ChangeNotifier {
       
       // تحديث متوسط التقييم للكتاب
       await _updateBookAverageRating(review.bookId);
-    } catch (e) {
+    } catch (e, st) {
+      // More detailed logging to help diagnose web 400 responses
+      if (e is FirebaseException) {
+        print('Firestore FirebaseException in addReview: code=${e.code}, message=${e.message}');
+      }
       print('خطأ في إضافة المراجعة: $e');
+      print(st);
       rethrow;
     }
   }
@@ -42,8 +47,12 @@ class ReviewService extends ChangeNotifier {
       return querySnapshot.docs
           .map((doc) => ReviewModel.fromFirestore(doc))
           .toList();
-    } catch (e) {
+    } catch (e, st) {
+      if (e is FirebaseException) {
+        print('Firestore FirebaseException in getBookReviews: code=${e.code}, message=${e.message}');
+      }
       print('خطأ في جلب المراجعات: $e');
+      print(st);
       return [];
     }
   }
@@ -58,8 +67,12 @@ class ReviewService extends ChangeNotifier {
       
       // تحديث متوسط التقييم للكتاب
       await _updateBookAverageRating(updatedReview.bookId);
-    } catch (e) {
+    } catch (e, st) {
+      if (e is FirebaseException) {
+        print('Firestore FirebaseException in updateReview: code=${e.code}, message=${e.message}');
+      }
       print('خطأ في تحديث المراجعة: $e');
+      print(st);
       rethrow;
     }
   }
@@ -71,8 +84,12 @@ class ReviewService extends ChangeNotifier {
       
       // تحديث متوسط التقييم للكتاب
       await _updateBookAverageRating(bookId);
-    } catch (e) {
+    } catch (e, st) {
+      if (e is FirebaseException) {
+        print('Firestore FirebaseException in deleteReview: code=${e.code}, message=${e.message}');
+      }
       print('خطأ في حذف المراجعة: $e');
+      print(st);
       rethrow;
     }
   }
@@ -89,8 +106,12 @@ class ReviewService extends ChangeNotifier {
       return querySnapshot.docs
           .map((doc) => ReviewModel.fromFirestore(doc))
           .toList();
-    } catch (e) {
+    } catch (e, st) {
+      if (e is FirebaseException) {
+        print('Firestore FirebaseException in getUserReviews: code=${e.code}, message=${e.message}');
+      }
       print('خطأ في جلب مراجعات المستخدم: $e');
+      print(st);
       return [];
     }
   }
@@ -109,8 +130,12 @@ class ReviewService extends ChangeNotifier {
         return ReviewModel.fromFirestore(querySnapshot.docs.first);
       }
       return null;
-    } catch (e) {
+    } catch (e, st) {
+      if (e is FirebaseException) {
+        print('Firestore FirebaseException in getUserReviewForBook: code=${e.code}, message=${e.message}');
+      }
       print('خطأ في البحث عن مراجعة المستخدم: $e');
+      print(st);
       return null;
     }
   }
@@ -145,8 +170,12 @@ class ReviewService extends ChangeNotifier {
         'totalReviews': reviewsSnapshot.docs.length,
         'updatedAt': FieldValue.serverTimestamp(),
       });
-    } catch (e) {
+    } catch (e, st) {
+      if (e is FirebaseException) {
+        print('Firestore FirebaseException in _updateBookAverageRating: code=${e.code}, message=${e.message}');
+      }
       print('خطأ في تحديث متوسط التقييم: $e');
+      print(st);
     }
   }
 
@@ -181,8 +210,12 @@ class ReviewService extends ChangeNotifier {
         'likes': likes,
         'dislikes': dislikes,
       });
-    } catch (e) {
+    } catch (e, st) {
+      if (e is FirebaseException) {
+        print('Firestore FirebaseException in toggleReviewLike: code=${e.code}, message=${e.message}');
+      }
       print('خطأ في تحديث الإعجاب: $e');
+      print(st);
     }
   }
 }

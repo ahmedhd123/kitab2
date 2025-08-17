@@ -1,4 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'dart:typed_data';
 import '../models/book_model.dart';
 import '../models/reading_progress_model.dart';
 
@@ -58,6 +60,60 @@ class BookRepository {
 
   Future<void> addOrUpdateBook(BookModel book) async {
     await _booksCol.doc(book.id).set(book.toMap(), SetOptions(merge: true));
+  }
+
+  /// Uploads a file bytes to Firebase Storage under `books/{bookId}/{fileName}` and
+  /// returns a download URL.
+  /// Uploads bytes to Storage and reports progress via [onProgress].
+  /// Returns the download URL on success. Throws on failure or timeout.
+  Future<String> uploadBookFile({
+    required String bookId,
+    required String fileName,
+    required List<int> bytes,
+    required String contentType,
+    void Function(double progress)? onProgress,
+  }) async {
+    final storage = FirebaseStorage.instance;
+    final ref = storage.ref().child('books').child(bookId).child(fileName);
+    final metadata = SettableMetadata(contentType: contentType);
+    final uploadTask = ref.putData(Uint8List.fromList(bytes), metadata);
+
+    // Listen to snapshot events and report progress if requested.
+    final sub = uploadTask.snapshotEvents.listen((snapshot) {
+      try {
+        final transferred = snapshot.bytesTransferred;
+        final total = snapshot.totalBytes;
+        if (total > 0) {
+          final p = transferred / total;
+          onProgress?.call(p);
+        }
+      } catch (_) {}
+    });
+
+    try {
+      // Set an upper bound to avoid infinite wait; 10 minutes for large files.
+      final snapshot = await uploadTask.whenComplete(() {}).timeout(const Duration(minutes: 10));
+      final url = await snapshot.ref.getDownloadURL();
+      onProgress?.call(1.0);
+      return url;
+    } finally {
+      await sub.cancel();
+    }
+  }
+
+  /// Convenience: upload file bytes then create/update Firestore document for the book.
+  Future<String> addBookWithFile({
+    required String bookId,
+    required BookModel book,
+    required String fileName,
+    required List<int> bytes,
+    required String contentType,
+  void Function(double progress)? onProgress,
+  }) async {
+  final fileUrl = await uploadBookFile(bookId: bookId, fileName: fileName, bytes: bytes, contentType: contentType, onProgress: onProgress);
+    final updated = book.copyWith(fileUrl: fileUrl, uploadedBy: book.uploadedBy);
+    await addOrUpdateBook(updated);
+    return fileUrl;
   }
 
   Future<void> incrementDownload(String bookId) async {

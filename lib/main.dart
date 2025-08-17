@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -7,6 +9,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'services/book_service.dart';
 import 'services/book_repository.dart';
 import 'services/auth_firebase_service.dart';
+import 'services/review_service.dart';
 import 'screens/auth/simple_login_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'utils/app_theme.dart';
@@ -18,6 +21,16 @@ Future<void> main() async {
   // تهيئة Firebase (Placeholders حالياً حتى يتم استبدال القيم عبر flutterfire configure)
   try {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    // On web, IndexedDB/persistence can be unavailable (incognito, restricted envs).
+    // Disable persistence to avoid the "client is offline" errors when IndexedDB isn't usable.
+    if (kIsWeb) {
+      try {
+        FirebaseFirestore.instance.settings = const Settings(persistenceEnabled: false);
+        debugPrint('Firestore settings: disabled persistence on web');
+      } catch (e) {
+        debugPrint('Failed to set Firestore settings: $e');
+      }
+    }
   } catch (e) {
     debugPrint('Firebase init skipped/failed: $e');
   }
@@ -34,6 +47,8 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (context) => AuthFirebaseService()),
         ChangeNotifierProvider(create: (context) => BookService(repository: BookRepository())),
         ChangeNotifierProvider(create: (context) => ThemeService()),
+        // Register ReviewService so screens can read/write reviews via Provider
+        ChangeNotifierProvider(create: (context) => ReviewService()),
       ],
       child: Consumer<ThemeService>(
         builder: (context, themeService, child) {

@@ -41,16 +41,55 @@ class _SimpleBookReaderScreenState extends State<SimpleBookReaderScreen> {
   final authService = Provider.of<AuthFirebaseService>(context, listen: false);
     final bookService = Provider.of<BookService>(context, listen: false);
     
+    final uid = authService.currentUser?.uid;
+    // prefer remote sync when user is signed in
+    if (uid != null && uid.isNotEmpty) {
+      bookService.syncReadingProgressFromRemote(widget.book.id, uid).then((progress) {
+        if (progress != null && mounted) {
+          setState(() {
+            _currentPage = progress.currentPage;
+            _bookmarks = Map<String, dynamic>.from(progress.bookmarks);
+            _highlights = Map<String, dynamic>.from(progress.highlights);
+          });
+          _pageController.animateToPage(
+            _currentPage - 1,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        }
+      }).catchError((_) {
+        // fallback to local progress
+        final progress = bookService.getReadingProgress(
+          widget.book.id,
+          uid,
+        );
+        if (progress != null && mounted) {
+          setState(() {
+            _currentPage = progress.currentPage;
+            _bookmarks = Map<String, dynamic>.from(progress.bookmarks);
+            _highlights = Map<String, dynamic>.from(progress.highlights);
+          });
+          _pageController.animateToPage(
+            _currentPage - 1,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
+        }
+      });
+      return;
+    }
+
+    // fallback: use local progress if no signed-in user
     final progress = bookService.getReadingProgress(
       widget.book.id,
-      authService.currentUser?.uid ?? '',
+      uid ?? '',
     );
 
     if (progress != null) {
       setState(() {
         _currentPage = progress.currentPage;
-  _bookmarks = Map<String, dynamic>.from(progress.bookmarks);
-  _highlights = Map<String, dynamic>.from(progress.highlights);
+        _bookmarks = Map<String, dynamic>.from(progress.bookmarks);
+        _highlights = Map<String, dynamic>.from(progress.highlights);
       });
       _pageController.animateToPage(
         _currentPage - 1,

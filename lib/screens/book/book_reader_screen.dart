@@ -27,12 +27,14 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
   int _currentPage = 1;
   int _totalPages = 0;
   double _progress = 0.0;
+  late DateTime _readingStartTime;
   // تمت إزالة دعم Syncfusion مؤقتاً بسبب تعارض الإصدارات مع intl
   // PdfViewerController _pdfController = PdfViewerController(); // معطل حالياً
 
   @override
   void initState() {
     super.initState();
+    _readingStartTime = DateTime.now();
     if (widget.book != null) {
       _downloadAndOpenBook();
       // بعد الإطار الأول لضمان توافر Providers
@@ -148,15 +150,46 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
         final bookService = Provider.of<BookService>(context, listen: false);
         
         if (userId != null && widget.book != null) {
+          // measure elapsed reading time since last checkpoint
+          final readingTime = DateTime.now().difference(_readingStartTime);
+          _readingStartTime = DateTime.now();
+
           bookService.updateReadingProgress(
             bookId: widget.book!.id,
             userId: userId,
             currentPage: _currentPage,
             totalPages: _totalPages,
+            additionalReadingTime: readingTime,
           );
         }
       }
     }
+  }
+
+  @override
+  void dispose() {
+    // save final progress before disposing
+    try {
+      if (widget.book != null) {
+        final bookService = Provider.of<BookService>(context, listen: false);
+        String? userId;
+        try {
+          final firebaseAuth = Provider.of<AuthFirebaseService>(context, listen: false);
+          userId = firebaseAuth.currentUser?.uid;
+        } catch (_) {}
+        if (userId != null) {
+          final readingTime = DateTime.now().difference(_readingStartTime);
+          bookService.updateReadingProgress(
+            bookId: widget.book!.id,
+            userId: userId,
+            currentPage: _currentPage,
+            totalPages: _totalPages,
+            additionalReadingTime: readingTime,
+          );
+        }
+      }
+    } catch (_) {}
+    super.dispose();
   }
 
   @override
@@ -170,6 +203,10 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
       );
     }
 
+  final bookService = Provider.of<BookService>(context);
+  final auth = Provider.of<AuthFirebaseService>(context, listen: false);
+  final conflict = auth.currentUser != null ? bookService.getConflict(widget.book!.id, auth.currentUser!.uid) : null;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -178,6 +215,20 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
           overflow: TextOverflow.ellipsis,
         ),
         actions: [
+          // sync indicator
+          Builder(builder: (ctx) {
+            final svc = Provider.of<BookService>(ctx);
+            final auth = Provider.of<AuthFirebaseService>(ctx, listen: false);
+            final status = auth.currentUser != null ? svc.getSyncStatus(widget.book!.id, auth.currentUser!.uid) : 'idle';
+            final color = status == 'syncing' ? Colors.orangeAccent : (status == 'success' ? Colors.greenAccent : (status == 'failed' ? Colors.redAccent : Colors.white));
+            return IconButton(
+              tooltip: 'Sync status: $status',
+              icon: Icon(Icons.sync, color: color),
+              onPressed: () {
+                ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('حالة المزامنة: $status')));
+              },
+            );
+          }),
           IconButton(
             icon: const Icon(Icons.bookmark_outline),
             onPressed: () {
@@ -206,7 +257,57 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
           ? const Center(child: CircularProgressIndicator())
           : _localFilePath == null
               ? const Center(child: Text('فشل في تحميل الكتاب'))
-              : _buildReader(),
+              : Column(children: [
+                  if (conflict != null)
+                    MaterialBanner(
+                      content: const Text('تم العثور على تعارض بين تقدم القراءة المحلي والسحابي.'),
+                      actions: [
+                        TextButton(
+                          onPressed: () async {
+                            // choose remote
+                            try {
+                              final remote = conflict['remote']!;
+                              await bookService.syncReadingProgressFromRemote(widget.book!.id, auth.currentUser!.uid);
+                              // apply remote
+                              setState(() {
+                                _currentPage = remote.currentPage;
+                                _totalPages = remote.totalPages;
+                                _progress = remote.progressPercentage;
+                              });
+                            } catch (_) {}
+                          },
+                          child: const Text('اعتمد النسخة السحابية'),
+                        ),
+                        TextButton(
+                          onPressed: () async {
+                            // choose local (re-upload)
+                            try {
+                              final local = conflict['local']!;
+                              await bookService.updateReadingProgress(
+                                bookId: local.bookId,
+                                userId: local.userId,
+                                currentPage: local.currentPage,
+                                totalPages: local.totalPages,
+                                additionalReadingTime: local.readingTime,
+                                bookmarks: local.bookmarks,
+                                highlights: local.highlights,
+                              );
+                              bookService.clearConflict(widget.book!.id, auth.currentUser!.uid);
+                            } catch (_) {}
+                          },
+                          child: const Text('اعتمد النسخة المحلية'),
+                        ),
+                        TextButton(
+                          onPressed: () async {
+                            // automatic merge: already stored in syncReadingProgressFromRemote previously, so just clear
+                            bookService.clearConflict(widget.book!.id, auth.currentUser!.uid);
+                          },
+                          child: const Text('دمج تلقائي'),
+                        ),
+                      ],
+                    ),
+                  Expanded(child: _buildReader()),
+                ]),
       bottomNavigationBar: _localFilePath != null ? _buildBottomControls() : null,
     );
   }

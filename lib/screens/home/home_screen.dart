@@ -6,6 +6,7 @@ import '../../services/book_service.dart';
 import '../book/books_screen.dart';
 import '../book/book_details_screen.dart';
 import '../library/library_screen.dart';
+import 'upload_book_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -122,14 +123,14 @@ class HomePage extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('قريباً: رفع كتاب'))),
-                        icon: const Icon(Icons.upload_file),
-                        label: const Text('رفع كتاب'),
-                        style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => UploadBookScreen())),
+                          icon: const Icon(Icons.upload_file),
+                          label: const Text('رفع كتاب'),
+                          style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
+                        ),
                       ),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 28),

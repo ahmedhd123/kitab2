@@ -70,6 +70,18 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  // إرسال رسالة تحقق بالبريد للمستخدم الحالي
+  Future<void> sendEmailVerification() async {
+    try {
+      final user = _auth.currentUser;
+      if (user != null && !user.emailVerified) {
+        await user.sendEmailVerification();
+      }
+    } catch (e) {
+      // ignore errors here; UI handles messaging
+    }
+  }
+
   // إنشاء ملف تعريف المستخدم في Firestore
   Future<void> _createUserProfile(User user, String displayName) async {
     try {
