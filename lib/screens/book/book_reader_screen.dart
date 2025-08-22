@@ -5,11 +5,20 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:http/http.dart' as http;
+// ignore: avoid_web_libraries_in_flutter
+// استبدلنا فتح التبويب المخصص بعرض مدمج PDF.js
+// نستخدم platformViewRegistry لتسجيل iframe للويب
+// ignore: avoid_web_libraries_in_flutter
+// تم الاستغناء عن الاستخدام المباشر لـ dart:html في هذا الملف
+import 'pdf_iframe_stub.dart' if (dart.library.html) 'pdf_iframe_web.dart';
 import '../../models/book_model.dart';
 import '../../services/book_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/auth_firebase_service.dart';
 import '../../services/theme_service.dart';
+import '../../widgets/epub_reader_widget.dart';
+import '../../widgets/pdf_reader_widget.dart';
 
 class BookReaderScreen extends StatefulWidget {
   final BookModel? book;
@@ -86,33 +95,40 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
       });
 
       if (kIsWeb) {
-        // على الويب: سنعرض رسالة أن التحميل المحلي غير مطلوب حالياً
-        setState(() {
-          _localFilePath = widget.book!.fileUrl; // سيُستخدم رمزياً
-          _isLoading = false;
-        });
+        // على الويب: استخدم الرابط مباشرة (يُعرض لاحقاً في _buildPDFReader)
+        _localFilePath = widget.book!.fileUrl;
+        _isLoading = false;
+        if (mounted) setState(() {});
         return;
       }
 
-      // نسخة من ملف PDF الموجود في assets إلى مجلد مؤقت
-      final assetPath = widget.book!.fileUrl; // مثال: assets/books/sample.pdf
-      if (!assetPath.toLowerCase().endsWith('.pdf')) {
-        throw 'فقط ملفات PDF مدعومة حالياً في النسخة التجريبية';
-      }
-
-      // قراءة البايتات من الأصول
-      final data = await rootBundle.load(assetPath);
-      final bytes = data.buffer.asUint8List();
-
-      final directory = await getApplicationDocumentsDirectory();
-      final fileName = assetPath.split('/').last;
-      final localFile = File('${directory.path}/$fileName');
-      await localFile.writeAsBytes(bytes, flush: true);
-
-      setState(() {
-        _localFilePath = localFile.path;
+  final src = widget.book!.fileUrl;
+      // EPUB لا يحتاج تنزيل هنا (سيعالج في EpubReaderWidget)
+      if (!src.toLowerCase().endsWith('.pdf')) {
         _isLoading = false;
-      });
+        if (mounted) setState(() {});
+        return;
+      }
+  List<int> bytes;
+      if (src.startsWith('assets/')) {
+        final data = await rootBundle.load(src);
+        bytes = data.buffer.asUint8List();
+      } else if (src.startsWith('http://') || src.startsWith('https://')) {
+        final resp = await http.get(Uri.parse(src));
+        if (resp.statusCode != 200) throw 'HTTP ${resp.statusCode}';
+        bytes = resp.bodyBytes;
+      } else {
+        final f = File(src);
+        if (!(await f.exists())) throw 'الملف غير موجود';
+        bytes = await f.readAsBytes();
+      }
+  final docsDir = await getApplicationDocumentsDirectory();
+  final fileName2 = src.split('/').last;
+  final localFile2 = File('${docsDir.path}/$fileName2');
+  await localFile2.writeAsBytes(bytes, flush: true);
+  _localFilePath = localFile2.path;
+      _isLoading = false;
+      if (mounted) setState(() {});
     } catch (e) {
       setState(() {
         _isLoading = false;
@@ -120,7 +136,7 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('خطأ في تحميل الكتاب: $e'),
+            content: Text('تعذر تحميل الملف: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -313,40 +329,9 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
   }
 
   Widget _buildReader() {
-    if (widget.book!.fileType.toLowerCase() == 'pdf') {
-      return _buildPDFReader();
-    } else if (widget.book!.fileType.toLowerCase() == 'epub') {
-      return _buildEPUBReader();
-    } else {
-      return const Center(
-        child: Text('نوع الملف غير مدعوم'),
-      );
-    }
-  }
-
-  Widget _buildPDFReader() {
-    if (kIsWeb) {
-      // Placeholder للويب حتى نعيد دمج syncfusion أو بديل متوافق
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.picture_as_pdf, size: 72, color: Colors.grey),
-            const SizedBox(height: 16),
-            Text(
-              'عرض PDF في الويب قيد التعليق مؤقتاً',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'تم تعطيل الحزمة بسبب تعارض الإصدارات (intl). سنعيد التفعيل لاحقاً.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
-            ),
-          ],
-        ),
-      );
-    }
+  final ext = widget.book!.fileType.toLowerCase();
+  if (ext == 'pdf') return _buildPDFReader();
+  if (ext == 'epub') return _buildEPUBReader();
     // المنصات الأخرى: الاستمرار باستخدام flutter_pdfview
     return PDFView(
       filePath: _localFilePath!,
@@ -374,37 +359,44 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
     );
   }
 
+  Widget _buildPDFReader() {
+    if (kIsWeb) {
+      final pdfUrl = _localFilePath ?? widget.book!.fileUrl;
+      // استخدام PDF.js العام (يمكن استضافته لاحقاً محلياً). نمرر رابط الملف في المعلمة file.
+      final viewerUrl = Uri.encodeFull('https://mozilla.github.io/pdf.js/web/viewer.html?file=$pdfUrl');
+      return Container(
+        color: Colors.black,
+        child: HtmlElementView(
+          viewType: _registerPdfIFrame(viewerUrl),
+        ),
+      );
+    }
+  return PdfReaderWidget(book: widget.book!, localFilePath: _localFilePath!);
+  }
+
+  // تسجيل IFrameView لعرض PDF عبر PDF.js (ويب فقط)
+  String _registerPdfIFrame(String url) {
+    final viewType = 'pdfjs_viewer_${widget.book?.id ?? 'temp'}';
+    if (!kIsWeb) return viewType;
+    registerPdfIframe(viewType, url);
+    return viewType;
+  }
+
   Widget _buildEPUBReader() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.book,
-            size: 64,
-            color: Colors.grey[400],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'قارئ EPUB',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'ميزة قراءة EPUB قيد التطوير',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Colors.grey[600],
-            ),
-          ),
-          const SizedBox(height: 16),
-          ElevatedButton(
-            onPressed: () {
-              // TODO: تنفيذ قارئ EPUB
-            },
-            child: const Text('فتح الكتاب'),
-          ),
-        ],
-      ),
+    final auth = Provider.of<AuthFirebaseService>(context, listen: false);
+    final userId = auth.currentUser?.uid ?? 'guest';
+    
+    print('إنشاء EPUB Reader:');
+    print('- مسار الملف: ${widget.book!.fileUrl}');
+    print('- نوع الملف: ${widget.book!.fileType}');
+    print('- معرف المستخدم: $userId');
+    print('- معرف الكتاب: ${widget.book!.id}');
+    
+    return EpubReaderWidget(
+      sourcePath: widget.book!.fileUrl,
+      bookService: Provider.of<BookService>(context, listen: false),
+      userId: userId,
+      bookId: widget.book!.id,
     );
   }
 

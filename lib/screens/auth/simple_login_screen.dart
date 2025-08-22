@@ -36,6 +36,7 @@ class _SimpleLoginScreenState extends State<SimpleLoginScreen> {
   }
 
   void _showError(String msg) {
+    if (!mounted) return; // تجنب استخدام context بعد التخلص من الودجت
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(msg), backgroundColor: Colors.red),
     );

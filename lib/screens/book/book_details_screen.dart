@@ -2,17 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
 import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../models/book_model.dart';
 import '../../services/book_service.dart';
 import '../../services/auth_firebase_service.dart';
 import '../../services/review_service.dart';
 import '../../models/review_model.dart';
-import 'simple_book_reader_screen.dart';
+// استبدلنا القارئ المبسّط بالقارئ الكامل
+import 'book_reader_screen.dart';
 import '../auth/simple_login_screen.dart';
 import '../../widgets/safe_image.dart';
 import '../../utils/design_tokens.dart';
 import '../../firebase_options.dart';
-import 'package:firebase_core/firebase_core.dart' show FirebaseException;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:html' as html;
 
@@ -55,11 +56,21 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
                   const SizedBox(height: 12),
+                  _buildPrimaryInfoCard(),
+                  const SizedBox(height: 24),
                   _buildMetaSection(),
                   const SizedBox(height: 24),
                   _buildProgressSection(),
                   const SizedBox(height: 24),
                   _buildDescriptionSection(),
+                  if (widget.book.bookSummary.isNotEmpty) ...[
+                    const SizedBox(height: 24),
+                    _buildSummarySection(),
+                  ],
+                  if (widget.book.authorBio.isNotEmpty) ...[
+                    const SizedBox(height: 24),
+                    _buildAuthorBioSection(),
+                  ],
                   if (widget.book.tags.isNotEmpty) ...[
                     const SizedBox(height: 24),
                     _buildTagsSection(),
@@ -91,6 +102,17 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
         ),
         actions: [
+          Consumer<AuthFirebaseService>(
+            builder: (context, auth, _) {
+              final isOwner = auth.currentUser?.uid == widget.book.uploadedBy;
+              if (!isOwner) return const SizedBox.shrink();
+              return IconButton(
+                tooltip: 'تعديل/حذف',
+                icon: const Icon(Icons.edit_note, color: Colors.white),
+                onPressed: _showEditMenu,
+              );
+            },
+          ),
           Consumer<BookService>(
             builder: (context, service, _) {
               final saved = service.isBookSaved(widget.book.id);
@@ -127,6 +149,11 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
                 Navigator.push(context, MaterialPageRoute(builder: (_) => const SimpleLoginScreen()));
                 return;
               }
+              if (value == 'edit') {
+                final isOwner = uid == widget.book.uploadedBy;
+                if (isOwner) _showEditMenu();
+                return;
+              }
               if (value == 'review') {
                 _showReviewDialog();
                 return;
@@ -149,6 +176,7 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
               const PopupMenuItem(value: 'completed', child: Text('أضف إلى: مُكتمل')),
               const PopupMenuItem(value: 'want', child: Text('أضف إلى: أريد قراءته')),
               const PopupMenuDivider(),
+              const PopupMenuItem(value: 'edit', child: Text('تعديل الكتاب')),
               const PopupMenuItem(value: 'review', child: Text('أضف مراجعة')),
             ],
           ),
@@ -182,10 +210,10 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
               ),
             ),
           ),
-          Align(
+          const Align(
             alignment: Alignment.bottomRight,
             child: Padding(
-              padding: const EdgeInsets.only(bottom: 20, right: 20),
+              padding: EdgeInsets.only(bottom: 20, right: 20),
               child: Opacity(
                 opacity: .16,
                 child: Icon(Icons.menu_book_rounded, size: 140, color: Colors.white),
@@ -216,124 +244,98 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
 
   // تشغيل تشخيص بسيط على Firestore (قراءة مستند اختبار) وعرض النتيجة/الاستثناء في مودال
   Future<void> _runFirestoreDiagnostic() async {
-    // show progress dialog
+    // نافذة تقدم بسيطة
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => const AlertDialog(
+      builder: (_) => const AlertDialog(
         content: SizedBox(height: 80, child: Center(child: CircularProgressIndicator())),
       ),
     );
 
-    try {
-      // Quick browser-level online check
-      final online = html.window.navigator.onLine;
-      if (online != true) {
-        Navigator.of(context).pop();
-        await showDialog<void>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Firestore diagnostic — offline'),
-            content: const Text('المتصفح حاليا في وضع عدم الاتصال (navigator.onLine = false). تحقق من اتصال الإنترنت أو إعدادات DevTools.'),
-            actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('OK'))],
-          ),
-        );
-        return;
-      }
-
-      // Programmatic HTTP checks to distinguish network/firewall/CORS issues
-      String googlePing = '<not attempted>';
-      String firestorePing = '<not attempted>';
-      try {
-        final g = await html.HttpRequest.request('https://www.google.com/generate_204', method: 'GET', requestHeaders: {}, withCredentials: false);
-        googlePing = 'status=${g.status}';
-      } catch (e) {
-        googlePing = 'error=${e.toString()}';
-      }
-      try {
-        final fs = await html.HttpRequest.request('https://firestore.googleapis.com/', method: 'GET', requestHeaders: {}, withCredentials: false);
-        firestorePing = 'status=${fs.status}, len=${fs.responseText?.length ?? 0}';
-      } catch (e) {
-        firestorePing = 'error=${e.toString()}';
-      }
-
-      final firestore = FirebaseFirestore.instance;
-      // try to read a small doc (does not need to exist) with timeout
-      final doc = await firestore.collection('diagnostics').doc('ping').get().timeout(const Duration(seconds: 10));
-      Navigator.of(context).pop(); // close progress
-
-      final content = doc.exists ? doc.data().toString() : 'Document not found (collection: diagnostics, doc: ping)';
+    // 1) تحقق من الاتصال بالمستخدم فقط (navigator.onLine) بدون أي طلبات خام قد تُسبب CORS
+    final online = html.window.navigator.onLine;
+    if (online != true) {
+      Navigator.of(context).pop();
       await showDialog<void>(
         context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Firestore diagnostic — success'),
-          content: SingleChildScrollView(child: Text('$content\n\ngooglePing: $googlePing\nfirestorePing: $firestorePing')),
-          actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('OK'))],
+        builder: (_) => const AlertDialog(
+          title: Text('تشخيص Firestore'),
+          content: Text('يبدو أنك غير متصل بالإنترنت (navigator.onLine = false).'),
         ),
       );
       return;
-    } on TimeoutException catch (_) {
-      // read timed out — try a quick write which often yields immediate FirebaseException with details
+    }
+
+    // 2) اختبار قراءة عبر الـ SDK فقط (بدون googlePing / firestorePing) لتجنب الضجيج في الـ Console
+    try {
+      final fs = FirebaseFirestore.instance;
+      final sw = Stopwatch()..start();
+      final doc = await fs.collection('diagnostics').doc('ping').get().timeout(const Duration(seconds: 8));
+      sw.stop();
+      Navigator.of(context).pop();
+
+      final content = doc.exists ? doc.data().toString() : 'المستند غير موجود (diagnostics/ping)';
+      await showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('تشخيص Firestore (قراءة)'),
+          content: SingleChildScrollView(
+            child: Text('نجاح القراءة خلال ${sw.elapsedMilliseconds}ms\n\n$content'),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('إغلاق'))],
+        ),
+      );
+    } on TimeoutException {
+      // 3) محاولة كتابة (قد تعطينا رسالة خطأ أسرع)
       try {
-  final online2 = html.window.navigator.onLine;
-  if (online2 != true) throw Exception('Browser offline (navigator.onLine = false)');
-        final firestore = FirebaseFirestore.instance;
-        await firestore.collection('diagnostics').doc('ping').set({'ts': FieldValue.serverTimestamp()}).timeout(const Duration(seconds: 12));
+        final fs = FirebaseFirestore.instance;
+        final sw = Stopwatch()..start();
+        await fs.collection('diagnostics').doc('ping').set({'ts': FieldValue.serverTimestamp()}).timeout(const Duration(seconds: 10));
+        sw.stop();
         Navigator.of(context).pop();
         await showDialog<void>(
           context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Firestore diagnostic — write success'),
-            content: const Text('تمت كتابة مستند الاختبار بنجاح (collection: diagnostics, doc: ping).'),
-            actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('OK'))],
+          builder: (_) => AlertDialog(
+            title: const Text('تشخيص Firestore (كتابة)'),
+            content: Text('تمت الكتابة بنجاح خلال ${sw.elapsedMilliseconds}ms'),
+            actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('إغلاق'))],
           ),
         );
-        return;
-      } on TimeoutException catch (_) {
+      } on TimeoutException {
         Navigator.of(context).pop();
         await showDialog<void>(
           context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Firestore diagnostic — timeout'),
-            content: const Text('انتهت مهلة الشبكة أثناء محاولة الوصول إلى Firestore.'),
-            actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('OK'))],
+          builder: (_) => const AlertDialog(
+            title: Text('تشخيص Firestore'),
+            content: Text('انتهت المهلة أثناء الوصول إلى Firestore (قراءة وكتابة). تحقق من الشبكة أو الإعدادات.'),
           ),
         );
-        return;
       } catch (e, st) {
         Navigator.of(context).pop();
-        String body;
-        if (e is FirebaseException) {
-          body = 'FirebaseException: code=${e.code}\nmessage=${e.message}\n\nstack:\n${st.toString()}';
-        } else {
-          body = 'Exception: ${e.toString()}\n\nstack:\n${st.toString()}';
-        }
+        final msg = (e is FirebaseException)
+            ? 'FirebaseException code=${e.code}\n${e.message ?? ''}'
+            : e.toString();
         await showDialog<void>(
           context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Firestore diagnostic — write error'),
-            content: SingleChildScrollView(child: Text(body)),
-            actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('OK'))],
+          builder: (_) => AlertDialog(
+            title: const Text('تشخيص Firestore (خطأ كتابة)'),
+            content: SingleChildScrollView(child: Text('$msg\n\n$st')),
+            actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('إغلاق'))],
           ),
         );
-        return;
       }
     } catch (e, st) {
       Navigator.of(context).pop();
-      String body;
-      if (e is FirebaseException) {
-        body = 'FirebaseException: code=${e.code}\nmessage=${e.message}\n\nstack:\n${st.toString()}';
-      } else {
-        body = 'Exception: ${e.toString()}\n\nstack:\n${st.toString()}';
-      }
-
-      // show detailed error so user can paste it here
+      final msg = (e is FirebaseException)
+          ? 'FirebaseException code=${e.code}\n${e.message ?? ''}'
+          : e.toString();
       await showDialog<void>(
         context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Firestore diagnostic — error'),
-          content: SingleChildScrollView(child: Text(body)),
-          actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('OK'))],
+        builder: (_) => AlertDialog(
+          title: const Text('تشخيص Firestore (خطأ قراءة)'),
+          content: SingleChildScrollView(child: Text('$msg\n\n$st')),
+          actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('إغلاق'))],
         ),
       );
     }
@@ -406,6 +408,245 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
           Text(widget.book.description, style: Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.6)),
         ],
       );
+
+  Widget _buildPrimaryInfoCard() {
+    final theme = Theme.of(context);
+    final release = widget.book.releaseDate != null ? 'تاريخ الإصدار: ${_formatDate(widget.book.releaseDate!)}' : null;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 120,
+          height: 170,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(color: Colors.black.withOpacity(.08), blurRadius: 10, offset: const Offset(0, 4)),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: widget.book.coverImageUrl.isNotEmpty
+                ? SafeImage(assetPath: widget.book.coverImageUrl, fit: BoxFit.cover)
+                : Container(color: Colors.grey.shade200, child: const Icon(Icons.menu_book_rounded, size: 48, color: Colors.grey)),
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(widget.book.title, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800, height: 1.15)),
+            const SizedBox(height: 6),
+            Text('بقلم: ${widget.book.author}', style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey[700], fontWeight: FontWeight.w600)),
+            if (release != null) ...[
+              const SizedBox(height: 8),
+              Row(children: [const Icon(Icons.event, size: 16, color: Colors.grey), const SizedBox(width: 4), Text(release, style: theme.textTheme.labelMedium?.copyWith(color: Colors.grey[700]))]),
+            ],
+            const SizedBox(height: 8),
+            Wrap(spacing: 8, runSpacing: 6, children: [
+              _infoPill(Icons.star, '${widget.book.averageRating.toStringAsFixed(1)} / 5'),
+              _infoPill(Icons.reviews, '${widget.book.totalReviews} مراجعة'),
+              _infoPill(Icons.download, '${widget.book.downloadCount} تنزيل'),
+              _infoPill(Icons.language, widget.book.language.toUpperCase()),
+            ]),
+          ]),
+        ),
+      ],
+    );
+  }
+
+  Widget _infoPill(IconData icon, String text) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(color: Theme.of(context).primaryColor.withOpacity(.08), borderRadius: BorderRadius.circular(30)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 14, color: Theme.of(context).primaryColor),
+          const SizedBox(width: 4),
+          Text(text, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+        ]),
+      );
+
+  String _formatDate(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  Widget _buildSummarySection() => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('نبذة عن الكتاب', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 12),
+          Text(widget.book.bookSummary, style: Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.55)),
+        ],
+      );
+
+  Widget _buildAuthorBioSection() => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('نبذة عن المؤلف', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+          const SizedBox(height: 12),
+          Text(widget.book.authorBio, style: Theme.of(context).textTheme.bodyLarge?.copyWith(height: 1.55)),
+        ],
+      );
+
+  void _showEditMenu() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) {
+        final titleController = TextEditingController(text: widget.book.title);
+        final descController = TextEditingController(text: widget.book.description);
+        final summaryController = TextEditingController(text: widget.book.bookSummary);
+        final authorBioController = TextEditingController(text: widget.book.authorBio);
+        DateTime? releaseDate = widget.book.releaseDate;
+        bool saving = false;
+        Uint8List? newCoverBytes;
+        String? newCoverName;
+        return StatefulBuilder(builder: (c, setModal) {
+          return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(c).viewInsets.bottom),
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Center(child: Container(width: 50, height: 5, margin: const EdgeInsets.only(bottom: 16), decoration: BoxDecoration(color: Colors.grey[400], borderRadius: BorderRadius.circular(4)))),
+                  Text('تعديل الكتاب', style: Theme.of(c).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 20),
+                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: SizedBox(
+                        width: 80,
+                        height: 110,
+                        child: newCoverBytes != null
+                            ? Image.memory(newCoverBytes!, fit: BoxFit.cover)
+                            : (widget.book.coverImageUrl.isNotEmpty
+                                ? SafeImage(assetPath: widget.book.coverImageUrl, fit: BoxFit.cover)
+                                : Container(color: Colors.grey.shade200, child: const Icon(Icons.image, size: 32, color: Colors.grey))),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('الغلاف', style: Theme.of(c).textTheme.labelLarge),
+                        const SizedBox(height: 6),
+                        OutlinedButton.icon(
+                          onPressed: saving
+                              ? null
+                              : () async {
+                                  try {
+                                    final res = await FilePicker.platform.pickFiles(
+                                      withData: true,
+                                      type: FileType.custom,
+                                      allowedExtensions: ['jpg', 'jpeg', 'png']
+                                    );
+                                    if (res != null && res.files.isNotEmpty) {
+                                      final f = res.files.first;
+                                      setModal(() {
+                                        newCoverBytes = f.bytes;
+                                        newCoverName = f.name;
+                                      });
+                                    }
+                                  } catch (e) {
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('فشل اختيار الصورة: $e')));
+                                    }
+                                  }
+                                },
+                          icon: const Icon(Icons.image_outlined),
+                          label: Text(newCoverName ?? 'تغيير الغلاف'),
+                        ),
+                        if (newCoverBytes != null)
+                          TextButton.icon(
+                            onPressed: saving
+                                ? null
+                                : () => setModal(() {
+                                      newCoverBytes = null;
+                                      newCoverName = null;
+                                    }),
+                            icon: const Icon(Icons.close),
+                            label: const Text('إزالة الجديد'),
+                          ),
+                      ]),
+                    )
+                  ]),
+                  const SizedBox(height: 16),
+                  TextField(controller: titleController, decoration: const InputDecoration(labelText: 'العنوان')), const SizedBox(height: 12),
+                  TextField(controller: descController, maxLines: 3, decoration: const InputDecoration(labelText: 'الوصف')), const SizedBox(height: 12),
+                  TextField(controller: summaryController, maxLines: 3, decoration: const InputDecoration(labelText: 'نبذة الكتاب')), const SizedBox(height: 12),
+                  TextField(controller: authorBioController, maxLines: 3, decoration: const InputDecoration(labelText: 'نبذة المؤلف')), const SizedBox(height: 12),
+                  Row(children: [
+                    Expanded(child: Text(releaseDate != null ? 'الإصدار: ${_formatDate(releaseDate!)}' : 'لا يوجد تاريخ إصدار')),
+                    TextButton.icon(onPressed: () async { final picked = await showDatePicker(context: c, initialDate: releaseDate ?? DateTime.now(), firstDate: DateTime(1800), lastDate: DateTime(2100)); if (picked != null) setModal(() => releaseDate = picked); }, icon: const Icon(Icons.event), label: const Text('اختيار')),
+                  ]),
+                  const SizedBox(height: 24),
+                  Row(children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        icon: saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.save),
+                        label: const Text('حفظ التعديلات'),
+                        onPressed: saving ? null : () async {
+                          setModal(() => saving = true);
+                          try {
+                            final svc = Provider.of<BookService>(context, listen: false);
+                            final updated = widget.book.copyWith(
+                              title: titleController.text.trim(),
+                              description: descController.text.trim(),
+                              bookSummary: summaryController.text.trim(),
+                              authorBio: authorBioController.text.trim(),
+                              releaseDate: releaseDate,
+                              updatedAt: DateTime.now(),
+                            );
+                            List<int>? coverBytes;
+                            String? coverType;
+                            if (newCoverBytes != null && newCoverBytes!.isNotEmpty) {
+                              coverBytes = newCoverBytes!.toList();
+                              final lower = (newCoverName ?? '').toLowerCase();
+                              coverType = lower.endsWith('.png') ? 'image/png' : 'image/jpeg';
+                            }
+                            await svc.updateBook(
+                              updated,
+                              coverImageBytes: coverBytes,
+                              coverImageContentType: coverType,
+                            );
+                            if (mounted) {
+                              Navigator.pop(c);
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث الكتاب')));
+                            }
+                          } catch (_) {
+                            if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('فشل في التحديث')));
+                          } finally {
+                            if (mounted) setModal(() => saving = false);
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    IconButton(
+                      icon: const Icon(Icons.delete_forever, color: Colors.redAccent),
+                      tooltip: 'حذف الكتاب',
+                      onPressed: saving ? null : () async {
+                        final confirm = await showDialog<bool>(context: context, builder: (_) => AlertDialog(title: const Text('تأكيد الحذف'), content: const Text('هل تريد حذف الكتاب؟ لا يمكن التراجع.'), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')), ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.red), onPressed: () => Navigator.pop(context, true), child: const Text('حذف'))]));
+                        if (confirm == true) {
+                          try {
+                            final svc = Provider.of<BookService>(context, listen: false);
+                            await svc.deleteBook(widget.book.id);
+                            if (mounted) {
+                              Navigator.pop(c);
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف الكتاب')));
+                            }
+                          } catch (_) {
+                            if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('فشل في حذف الكتاب')));
+                          }
+                        }
+                      },
+                    ),
+                  ]),
+                ]),
+              ),
+            ),
+          );
+        });
+      },
+    );
+  }
 
   Widget _buildTagsSection() => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -518,7 +759,7 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
             return Row(children: [
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SimpleBookReaderScreen(book: widget.book))),
+                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => BookReaderScreen(book: widget.book))),
                   icon: const Icon(Icons.play_arrow_rounded),
                   label: Text(progress == null ? 'بدء القراءة' : 'متابعة القراءة'),
                 ),
@@ -555,7 +796,7 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
   // عرض حوار إضافة مراجعة
   Future<void> _showReviewDialog() async {
     double rating = 5.0;
-    final TextEditingController _commentController = TextEditingController();
+    final TextEditingController commentController = TextEditingController();
     bool isSending = false;
 
     await showDialog<void>(
@@ -579,7 +820,7 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
                   }),
                 ),
                 TextField(
-                  controller: _commentController,
+                  controller: commentController,
                   maxLines: 4,
                   decoration: const InputDecoration(hintText: 'اكتب تعليقك...'),
                   enabled: !isSending,
@@ -595,7 +836,7 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
                 onPressed: isSending
                     ? null
                     : () async {
-                        final comment = _commentController.text.trim();
+                        final comment = commentController.text.trim();
                         dialogSetState(() => isSending = true);
                         bool success = false;
                         try {
@@ -606,7 +847,13 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
 
                         if (success) {
                           _loadReviews();
-                          if (mounted) Navigator.of(dialogCtx).pop();
+                          if (mounted) {
+                            Navigator.of(dialogCtx).pop();
+                            // خيار: الرجوع للشاشة السابقة بعد الإضافة
+                            if (Navigator.of(context).canPop()) {
+                              Navigator.of(context).pop();
+                            }
+                          }
                         }
                       },
                 child: isSending
@@ -620,7 +867,7 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
     );
 
     // dispose controller after dialog is closed
-    _commentController.dispose();
+    commentController.dispose();
   }
 
   // إرسال المراجعة إلى الخدمة (upsert)
@@ -672,7 +919,7 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
     } catch (e) {
       // Prefer concise, actionable messages
       final msg = (e is FirebaseException && e.message != null) ? e.message! : e.toString();
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('فشل في إضافة المراجعة: ${msg.length > 200 ? msg.substring(0, 200) + '...' : msg}')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('فشل في إضافة المراجعة: ${msg.length > 200 ? '${msg.substring(0, 200)}...' : msg}')));
       return false;
     }
   }

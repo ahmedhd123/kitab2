@@ -143,6 +143,15 @@ class BookCard extends StatelessWidget {
                                     fontWeight: FontWeight.w600,
                                   ),
                             ),
+                            if (book.releaseDate != null) ...[
+                              const SizedBox(width: 10),
+                              const Icon(Icons.event, size: 14, color: Colors.grey),
+                              const SizedBox(width: 3),
+                              Text(
+                                _fmtDate(book.releaseDate!),
+                                style: Theme.of(context).textTheme.labelSmall,
+                              ),
+                            ],
                             const SizedBox(width: 10),
                             Icon(Icons.download_rounded, size: 14, color: Colors.grey.shade500),
                             const SizedBox(width: 3),
@@ -160,4 +169,6 @@ class BookCard extends StatelessWidget {
       },
     );
   }
+
+  String _fmtDate(DateTime d) => '${d.year}-${d.month.toString().padLeft(2,'0')}-${d.day.toString().padLeft(2,'0')}';
 }

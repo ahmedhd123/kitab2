@@ -33,8 +33,8 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (context, themeService, child) {
           return FloatingActionButton(
             onPressed: () => themeService.toggle(),
-            child: Icon(themeService.isDark ? Icons.dark_mode : Icons.light_mode),
             tooltip: 'تبديل الوضع',
+            child: Icon(themeService.isDark ? Icons.dark_mode : Icons.light_mode),
           );
         },
       ),
@@ -125,7 +125,7 @@ class HomePage extends StatelessWidget {
                     const SizedBox(width: 12),
                       Expanded(
                         child: OutlinedButton.icon(
-                          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => UploadBookScreen())),
+                          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UploadBookScreen())),
                           icon: const Icon(Icons.upload_file),
                           label: const Text('رفع كتاب'),
                           style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
@@ -199,7 +199,7 @@ class HomePage extends StatelessWidget {
 
                 _sectionHeader(context, 'الأكثر تحميلاً', onViewAll: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BooksScreen()))),
                 const SizedBox(height: 12),
-                ...bookService.getMostDownloadedBooks(limit: 3).map((b) => _downloadedTile(context, b)).toList(),
+                ...bookService.getMostDownloadedBooks(limit: 3).map((b) => _downloadedTile(context, b)),
               ],
             ),
           ),

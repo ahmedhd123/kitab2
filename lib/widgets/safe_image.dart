@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-/// أداة تحميل صورة آمنة مع fallback عند الفشل أو المسار الفارغ
-class SafeImage extends StatelessWidget {
-  final String? assetPath;
+/// أداة تحميل صورة آمنة مع محاولات بديلة للمسار عند الفشل (مفيد للويب)
+class SafeImage extends StatefulWidget {
+  final String? assetPath; // يمكن أن تكون مسار أصول أو رابط شبكة
   final double? width;
   final double? height;
   final BoxFit fit;
@@ -20,29 +20,73 @@ class SafeImage extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final radius = borderRadius ?? BorderRadius.circular(12);
+  State<SafeImage> createState() => _SafeImageState();
+}
 
-    if (assetPath == null || assetPath!.isEmpty) {
+class _SafeImageState extends State<SafeImage> {
+  late String? _currentPath;
+  int _attempt = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentPath = widget.assetPath;
+  }
+
+  String? _alternate(String? p) {
+    if (p == null || p.isEmpty) return p;
+    if (p.startsWith('assets/')) return p.substring('assets/'.length);
+    return 'assets/$p';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = widget.borderRadius ?? BorderRadius.circular(12);
+
+    if (_currentPath == null || _currentPath!.isEmpty) {
       return _fallback(radius);
     }
 
-    return ClipRRect(
-      borderRadius: radius,
-      child: Image.asset(
-        assetPath!,
-        width: width,
-        height: height,
-        fit: fit,
+    final isNetwork = _currentPath!.startsWith('http://') || _currentPath!.startsWith('https://');
+
+    Widget imageWidget;
+    if (isNetwork) {
+      imageWidget = Image.network(
+        _currentPath!,
+        width: widget.width,
+        height: widget.height,
+        fit: widget.fit,
         errorBuilder: (c, e, st) => _fallback(radius),
-      ),
-    );
+      );
+    } else {
+      imageWidget = Image.asset(
+        _currentPath!,
+        width: widget.width,
+        height: widget.height,
+        fit: widget.fit,
+        errorBuilder: (c, e, st) {
+          if (_attempt == 0) {
+            _attempt = 1;
+            final alt = _alternate(_currentPath);
+            if (alt != null && alt != _currentPath) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) setState(() => _currentPath = alt);
+              });
+              return widget.placeholder ?? SizedBox(width: widget.width, height: widget.height, child: const Center(child: CircularProgressIndicator()));
+            }
+          }
+          return _fallback(radius);
+        },
+      );
+    }
+
+    return ClipRRect(borderRadius: radius, child: imageWidget);
   }
 
   Widget _fallback(BorderRadius r) {
     return Container(
-      width: width,
-      height: height,
+      width: widget.width,
+      height: widget.height,
       decoration: BoxDecoration(
         borderRadius: r,
         color: Colors.grey.shade200,
@@ -51,7 +95,7 @@ class SafeImage extends StatelessWidget {
       child: Icon(
         Icons.image_not_supported_outlined,
         color: Colors.grey.shade500,
-        size: (width != null) ? (width! * .4).clamp(24, 48) : 32,
+        size: (widget.width != null) ? (widget.width! * .4).clamp(24, 48) : 32,
       ),
     );
   }

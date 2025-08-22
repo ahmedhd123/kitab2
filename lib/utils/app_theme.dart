@@ -46,16 +46,16 @@ class AppTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ButtonStyle(
-          textStyle: MaterialStateProperty.all(const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-          padding: MaterialStateProperty.all(const EdgeInsets.symmetric(horizontal: 28, vertical: 14)),
-          shape: MaterialStateProperty.all(RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-          elevation: MaterialStateProperty.all(0),
-          backgroundColor: MaterialStateProperty.resolveWith((states) {
-            if (states.contains(MaterialState.disabled)) return base.colorScheme.onSurface.withOpacity(.12);
+          textStyle: WidgetStateProperty.all(const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+          padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 28, vertical: 14)),
+          shape: WidgetStateProperty.all(RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+          elevation: WidgetStateProperty.all(0),
+          backgroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.disabled)) return base.colorScheme.onSurface.withOpacity(.12);
             return base.colorScheme.primary;
           }),
-          foregroundColor: MaterialStateProperty.all(base.colorScheme.onPrimary),
-          overlayColor: MaterialStateProperty.resolveWith((states) => base.colorScheme.primary.withOpacity(.08)),
+          foregroundColor: WidgetStateProperty.all(base.colorScheme.onPrimary),
+          overlayColor: WidgetStateProperty.resolveWith((states) => base.colorScheme.primary.withOpacity(.08)),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -179,12 +179,12 @@ class AppTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ButtonStyle(
-          textStyle: MaterialStateProperty.all(const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-          padding: MaterialStateProperty.all(const EdgeInsets.symmetric(horizontal: 28, vertical: 14)),
-          shape: MaterialStateProperty.all(RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-          elevation: MaterialStateProperty.all(0),
-          backgroundColor: MaterialStateProperty.all(base.colorScheme.primary),
-          foregroundColor: MaterialStateProperty.all(base.colorScheme.onPrimary),
+          textStyle: WidgetStateProperty.all(const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+          padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 28, vertical: 14)),
+          shape: WidgetStateProperty.all(RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+          elevation: WidgetStateProperty.all(0),
+          backgroundColor: WidgetStateProperty.all(base.colorScheme.primary),
+          foregroundColor: WidgetStateProperty.all(base.colorScheme.onPrimary),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(

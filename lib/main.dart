@@ -8,9 +8,9 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 // تمت إزالة SimpleAuthService بعد الانتقال الكامل إلى Firebase Auth
 import 'services/book_service.dart';
 import 'services/book_repository.dart';
-import 'services/auth_firebase_service.dart';
+import 'services/auth_firebase_service.dart'; // الخدمة الموحدة للمصادقة
 import 'services/review_service.dart';
-import 'screens/auth/simple_login_screen.dart';
+import 'screens/auth/login_screen.dart'; // شاشة تسجيل الدخول المحسّنة
 import 'screens/home/home_screen.dart';
 import 'utils/app_theme.dart';
 import 'screens/splash_screen.dart';
@@ -73,7 +73,7 @@ class MyApp extends StatelessWidget {
             // Named routes used by various screens (SplashScreen and auth flows)
             routes: {
               '/home': (context) => const HomeScreen(),
-              '/login': (context) => const SimpleLoginScreen(),
+              '/login': (context) => const LoginScreen(),
             },
             debugShowCheckedModeBanner: false,
             home: Builder(
@@ -88,7 +88,7 @@ class MyApp extends StatelessWidget {
                     if (snapshot.hasData) {
                       return const HomeScreen();
                     } else {
-                      return const SimpleLoginScreen();
+                      return const LoginScreen();
                     }
                   },
                 );

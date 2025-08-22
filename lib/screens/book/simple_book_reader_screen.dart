@@ -38,65 +38,47 @@ class _SimpleBookReaderScreenState extends State<SimpleBookReaderScreen> {
   }
 
   void _loadSavedProgress() {
-  final authService = Provider.of<AuthFirebaseService>(context, listen: false);
+    final authService = Provider.of<AuthFirebaseService>(context, listen: false);
     final bookService = Provider.of<BookService>(context, listen: false);
-    
-    final uid = authService.currentUser?.uid;
-    // prefer remote sync when user is signed in
-    if (uid != null && uid.isNotEmpty) {
-      bookService.syncReadingProgressFromRemote(widget.book.id, uid).then((progress) {
-        if (progress != null && mounted) {
-          setState(() {
-            _currentPage = progress.currentPage;
-            _bookmarks = Map<String, dynamic>.from(progress.bookmarks);
-            _highlights = Map<String, dynamic>.from(progress.highlights);
-          });
-          _pageController.animateToPage(
-            _currentPage - 1,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-          );
-        }
-      }).catchError((_) {
-        // fallback to local progress
-        final progress = bookService.getReadingProgress(
-          widget.book.id,
-          uid,
-        );
-        if (progress != null && mounted) {
-          setState(() {
-            _currentPage = progress.currentPage;
-            _bookmarks = Map<String, dynamic>.from(progress.bookmarks);
-            _highlights = Map<String, dynamic>.from(progress.highlights);
-          });
-          _pageController.animateToPage(
-            _currentPage - 1,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-          );
-        }
-      });
-      return;
-    }
+    // جدولة بعد الإطار الأول لتفادي notifyListeners أثناء البناء
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final uid = authService.currentUser?.uid;
+      if (uid != null && uid.isNotEmpty) {
+        bookService.syncReadingProgressFromRemote(widget.book.id, uid).then((progress) {
+          if (progress != null && mounted) {
+            setState(() {
+              _currentPage = progress.currentPage;
+              _bookmarks = Map<String, dynamic>.from(progress.bookmarks);
+              _highlights = Map<String, dynamic>.from(progress.highlights);
+            });
+            _pageController.jumpToPage(_currentPage - 1);
+          }
+        }).catchError((_) {
+          final progress = bookService.getReadingProgress(widget.book.id, uid);
+          if (progress != null && mounted) {
+            setState(() {
+              _currentPage = progress.currentPage;
+              _bookmarks = Map<String, dynamic>.from(progress.bookmarks);
+              _highlights = Map<String, dynamic>.from(progress.highlights);
+            });
+            _pageController.jumpToPage(_currentPage - 1);
+          }
+        });
+        return;
+      }
 
-    // fallback: use local progress if no signed-in user
-    final progress = bookService.getReadingProgress(
-      widget.book.id,
-      uid ?? '',
-    );
-
-    if (progress != null) {
-      setState(() {
-        _currentPage = progress.currentPage;
-        _bookmarks = Map<String, dynamic>.from(progress.bookmarks);
-        _highlights = Map<String, dynamic>.from(progress.highlights);
-      });
-      _pageController.animateToPage(
-        _currentPage - 1,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
-    }
+      // fallback محلي
+      final progress = bookService.getReadingProgress(widget.book.id, '');
+      if (progress != null && mounted) {
+        setState(() {
+          _currentPage = progress.currentPage;
+          _bookmarks = Map<String, dynamic>.from(progress.bookmarks);
+          _highlights = Map<String, dynamic>.from(progress.highlights);
+        });
+        _pageController.jumpToPage(_currentPage - 1);
+      }
+    });
   }
 
   void _saveProgress() {
@@ -151,6 +133,12 @@ class _SimpleBookReaderScreenState extends State<SimpleBookReaderScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ضمان قيمة صفحات صالحة لتفادي أخطاء Slider (min <= max)
+    final int safeTotalPages = widget.book.pageCount <= 0 ? 1 : widget.book.pageCount;
+    if (_currentPage > safeTotalPages) {
+      // ضبط الصفحة الحالية ضمن الحدود المسموحة
+      _currentPage = safeTotalPages;
+    }
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: _showControls
@@ -251,17 +239,19 @@ class _SimpleBookReaderScreenState extends State<SimpleBookReaderScreen> {
                         ),
                         Expanded(
                           child: Slider(
-                            value: _currentPage.toDouble(),
+                            value: _currentPage.clamp(1, safeTotalPages).toDouble(),
                             min: 1,
-                            max: widget.book.pageCount.toDouble(),
-                            divisions: widget.book.pageCount - 1,
-                            onChanged: (value) {
-                              _goToPage(value.round());
-                            },
+                            max: safeTotalPages.toDouble(),
+                            divisions: safeTotalPages > 1 ? safeTotalPages - 1 : null,
+                            onChanged: safeTotalPages > 1
+                                ? (value) {
+                                    _goToPage(value.round());
+                                  }
+                                : null,
                           ),
                         ),
                         Text(
-                          '${widget.book.pageCount}',
+                          '$safeTotalPages',
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ],

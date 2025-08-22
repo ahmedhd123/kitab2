@@ -1,15 +1,17 @@
-import 'package:flutter/foundation.dart';
 import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import '../models/book_model.dart';
 import '../models/reading_progress_model.dart';
 import 'book_repository.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class BookService extends ChangeNotifier {
   final List<BookModel> _books = [];
   final List<ReadingProgressModel> _readingProgress = [];
   final List<String> _savedBooks = [];
   final BookRepository? _repository; // مستودع Firestore اختياري
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _booksSub; // اشتراك فوري
   // حالة المزامنة لكل (userId, bookId) => 'idle'|'syncing'|'success'|'failed'
   final Map<String, String> _syncStatus = {};
   // آخر تعارض مُكتشف (local, remote) لكل مفتاح userId_bookId
@@ -17,6 +19,7 @@ class BookService extends ChangeNotifier {
   
   bool _isLoading = false;
   String? _error;
+  bool _initialRemoteTried = false; // لمنع التكرار غير الضروري
 
   // Getters
   List<BookModel> get books => List.unmodifiable(_books);
@@ -44,166 +47,134 @@ class BookService extends ChangeNotifier {
   ];
 
   BookService({BookRepository? repository}) : _repository = repository {
-    _initializeSampleData();
-    _loadFromRemote();
+    // عند التهيئة: تحميل من السحابة فقط بدون بيانات تجريبية
+    if (_repository != null) {
+      _loadFromRemote()
+          .timeout(const Duration(seconds: 10), onTimeout: () {
+        if (kDebugMode) debugPrint('[BookService] remote load timeout (10s)');
+        return; // تجاهل
+      }).catchError((e) {
+        if (kDebugMode) debugPrint('[BookService] remote load error: $e');
+      });
+  _listenRealtime();
+    }
   }
 
   Future<void> _loadFromRemote() async {
     if (_repository == null) return;
+  if (_isLoading) return; // تفادي التوازي
     try {
       _setLoading(true);
-    final remote = await _repository.fetchBooks();
+      if (kDebugMode) debugPrint('[BookService] fetching remote books...');
+      final remote = await _repository.fetchBooks();
       if (remote.isNotEmpty) {
-        _books
-          ..clear()
-          ..addAll(remote);
+        // دمج: استبدل الكتب التي لها نفس المعرف وأضف الجديدة بدون حذف العينات إن لم تكن موجودة
+        int replaced = 0;
+        for (final rb in remote) {
+          final idx = _books.indexWhere((b) => b.id == rb.id);
+            if (idx != -1) {
+              _books[idx] = rb; // تحديث
+              replaced++;
+            } else {
+              _books.add(rb); // إضافة جديدة
+            }
+        }
+        if (kDebugMode) debugPrint('[BookService] merged remote books: fetched=${remote.length} replaced=$replaced totalNow=${_books.length}');
+      } else if (kDebugMode) {
+        debugPrint('[BookService] remote books list empty; keeping local sample');
       }
     } catch (e) {
       _setError('فشل في جلب البيانات السحابية');
+      if (kDebugMode) debugPrint('[BookService] fetch error: $e');
     } finally {
       _setLoading(false);
+      _initialRemoteTried = true;
     }
   }
 
-  // تهيئة بيانات تجريبية
-  void _initializeSampleData() {
-    _books.addAll([
-  BookModel(
-        id: '1',
-        title: 'مئة عام من العزلة',
-        author: 'غابرييل غارسيا ماركيز',
-        description: 'رواية خيالية من أعمال الأدب العالمي تحكي قصة عائلة بوينديا عبر سبعة أجيال في قرية ماكوندو الخيالية.',
-        category: 'الأدب',
-  coverImageUrl: 'assets/images/placeholder.png',
-        fileUrl: 'assets/books/100_years.pdf',
-        fileType: 'pdf',
-        averageRating: 4.5,
-        totalReviews: 1200,
-        createdAt: DateTime.now().subtract(const Duration(days: 30)),
-        tags: ['أدب عالمي', 'رواية', 'خيال'],
-        pageCount: 432,
-        language: 'ar',
-        uploadedBy: 'admin',
-        downloadCount: 5600,
-      ),
-  BookModel(
-        id: '2',
-        title: 'تاريخ موجز للزمن',
-        author: 'ستيفن هوكينغ',
-        description: 'كتاب علمي يشرح أسس الفيزياء النظرية والكونيات بطريقة مبسطة للقارئ العادي.',
-        category: 'العلوم',
-  coverImageUrl: 'assets/images/placeholder.png',
-        fileUrl: 'assets/books/brief_history.pdf',
-        fileType: 'pdf',
-        averageRating: 4.8,
-        totalReviews: 956,
-        createdAt: DateTime.now().subtract(const Duration(days: 20)),
-        tags: ['فيزياء', 'كونيات', 'علم'],
-        pageCount: 256,
-        language: 'ar',
-        uploadedBy: 'admin',
-        downloadCount: 3400,
-      ),
-  BookModel(
-        id: '3',
-        title: 'فن الحرب',
-        author: 'سون تزو',
-        description: 'كتاب استراتيجي عسكري صيني قديم يحتوي على حكم وأساليب في الحرب والاستراتيجية.',
-        category: 'الفلسفة',
-  coverImageUrl: 'assets/images/placeholder.png',
-        fileUrl: 'assets/books/art_of_war.pdf',
-        fileType: 'pdf',
-        averageRating: 4.3,
-        totalReviews: 2100,
-        createdAt: DateTime.now().subtract(const Duration(days: 10)),
-        tags: ['استراتيجية', 'فلسفة', 'تاريخ'],
-        pageCount: 128,
-        language: 'ar',
-        uploadedBy: 'admin',
-        downloadCount: 8900,
-      ),
-  BookModel(
-        id: '4',
-        title: 'البرمجة بلغة Flutter',
-        author: 'محمد أحمد',
-        description: 'دليل شامل لتعلم تطوير التطبيقات باستخدام Flutter من الصفر حتى الاحتراف.',
-        category: 'التكنولوجيا',
-  coverImageUrl: 'assets/images/placeholder.png',
-        fileUrl: 'assets/books/flutter_programming.pdf',
-        fileType: 'pdf',
-        averageRating: 4.6,
-        totalReviews: 743,
-        createdAt: DateTime.now().subtract(const Duration(days: 5)),
-        tags: ['برمجة', 'فلتر', 'تطوير تطبيقات'],
-        pageCount: 412,
-        language: 'ar',
-        uploadedBy: 'admin',
-        downloadCount: 1200,
-      ),
-  BookModel(
-        id: '5',
-        title: 'رحلة ابن بطوطة',
-        author: 'ابن بطوطة',
-        description: 'كتاب رحلات يصف فيه ابن بطوطة رحلاته عبر العالم الإسلامي في القرن الرابع عشر.',
-        category: 'التاريخ',
-  coverImageUrl: 'assets/images/placeholder.png',
-        fileUrl: 'assets/books/ibn_battuta.pdf',
-        fileType: 'pdf',
-        averageRating: 4.4,
-        totalReviews: 1500,
-        createdAt: DateTime.now().subtract(const Duration(days: 15)),
-        tags: ['رحلات', 'تاريخ إسلامي', 'جغرافيا'],
-        pageCount: 584,
-        language: 'ar',
-        uploadedBy: 'admin',
-        downloadCount: 2800,
-      ),
-      // كتاب تجريبي لملف PDF داخل assets
-      BookModel(
-        id: 'sample',
-        title: 'كتاب تجريبي PDF',
-        author: 'فريق التطوير',
-        description: 'هذا كتاب تجريبي لعرض آلية فتح ملفات PDF المخزنة ضمن مجلد assets.',
-        category: 'التكنولوجيا',
-        coverImageUrl: 'assets/images/sample_cover.png', // ضع صورة لاحقاً بنفس الاسم
-        fileUrl: 'assets/books/sample.pdf',
-        fileType: 'pdf',
-        averageRating: 0.0,
-        totalReviews: 0,
-        createdAt: DateTime.now(),
-        tags: ['تجريبي', 'PDF', 'اختبار'],
-  pageCount: 25,
-        language: 'ar',
-        uploadedBy: 'admin',
-        downloadCount: 0,
-      ),
-    ]);
-
-    // بيانات تقدم القراءة التجريبية
-    _readingProgress.addAll([
-      ReadingProgressModel(
-        id: '1',
-        userId: 'user1',
-        bookId: '1',
-        currentPage: 280,
-        totalPages: 432,
-        lastReadAt: DateTime.now().subtract(const Duration(hours: 2)),
-        readingTime: const Duration(hours: 12, minutes: 30),
-      ),
-      ReadingProgressModel(
-        id: '2',
-        userId: 'user1',
-        bookId: '2',
-        currentPage: 82,
-        totalPages: 256,
-        lastReadAt: DateTime.now().subtract(const Duration(days: 1)),
-        readingTime: const Duration(hours: 4, minutes: 15),
-      ),
-    ]);
-
-    // كتب محفوظة تجريبية
-    _savedBooks.addAll(['3', '4', '5']);
+  // استدعاء عام لإعادة التحميل (مثلاً بعد تسجيل الدخول)
+  Future<void> refreshRemote({bool force = false}) async {
+    if (_repository == null) return;
+    if (!force && _initialRemoteTried && _books.isNotEmpty) return;
+    await _loadFromRemote();
   }
+
+  // الاستماع الفوري لتحديثات الكتب من Firestore
+  void _listenRealtime() {
+    try {
+      _booksSub?.cancel();
+      _booksSub = FirebaseFirestore.instance
+          .collection('books')
+          .orderBy('createdAt', descending: true)
+          .snapshots()
+          .listen((snapshot) {
+        final remote = snapshot.docs.map((d) {
+          try {
+            final data = d.data();
+            final createdAt = (data['createdAt'] is Timestamp)
+                ? (data['createdAt'] as Timestamp).toDate()
+                : DateTime.tryParse(data['createdAt']?.toString() ?? '') ?? DateTime.now();
+            final updatedAt = (data['updatedAt'] is Timestamp)
+                ? (data['updatedAt'] as Timestamp).toDate()
+                : (data['updatedAt'] != null
+                    ? DateTime.tryParse(data['updatedAt'].toString())
+                    : null);
+            return BookModel(
+              id: d.id,
+              title: data['title'] ?? '',
+              author: data['author'] ?? '',
+                authorBio: data['authorBio'] ?? '',
+              description: data['description'] ?? '',
+              category: data['category'] ?? '',
+              coverImageUrl: data['coverImageUrl'] ?? '',
+        bookSummary: data['bookSummary'] ?? '',
+              fileUrl: data['fileUrl'] ?? '',
+              fileType: data['fileType'] ?? 'pdf',
+              averageRating: (data['averageRating'] ?? 0).toDouble(),
+              totalReviews: data['totalReviews'] ?? 0,
+              downloadCount: data['downloadCount'] ?? 0,
+              uploadedBy: data['uploadedBy'] ?? '',
+              createdAt: createdAt,
+              updatedAt: updatedAt,
+        releaseDate: (data['releaseDate'] is Timestamp)
+          ? (data['releaseDate'] as Timestamp).toDate()
+          : (data['releaseDate'] != null
+            ? DateTime.tryParse(data['releaseDate'].toString())
+            : null),
+              tags: List<String>.from(data['tags'] ?? []),
+              pageCount: data['pageCount'] ?? 0,
+              language: data['language'] ?? 'ar',
+            );
+          } catch (e) {
+            if (kDebugMode) debugPrint('[BookService] map error $e');
+            return null;
+          }
+        }).whereType<BookModel>().toList();
+
+        // دمج ذكي: استبدال أو إضافة فقط
+        int replaced = 0;
+        for (final rb in remote) {
+          final idx = _books.indexWhere((b) => b.id == rb.id);
+          if (idx != -1) {
+            _books[idx] = rb;
+            replaced++;
+          } else {
+            _books.add(rb);
+          }
+        }
+        // إزالة الكتب المحلية التي حُذفت من السحابة
+        _books.removeWhere((b) => remote.every((r) => r.id != b.id));
+        if (kDebugMode) debugPrint('[BookService] realtime books update fetched=${remote.length} replaced=$replaced total=${_books.length}');
+        notifyListeners();
+      }, onError: (e) {
+        if (kDebugMode) debugPrint('[BookService] realtime listen error: $e');
+      });
+    } catch (e) {
+      if (kDebugMode) debugPrint('[BookService] failed to start realtime listener: $e');
+    }
+  }
+
+  // تمت إزالة البيانات التجريبية: يبدأ التطبيق فارغاً ثم يتم ملؤه من Firestore
 
   // البحث في الكتب
   List<BookModel> searchBooks(String query, {String? category}) {
@@ -275,7 +246,8 @@ class BookService extends ChangeNotifier {
 
   // الحصول على الكتب المحفوظة
   List<BookModel> getSavedBooks() {
-    return books.where((book) => _savedBooks.contains(book.id)).toList();
+  if (_savedBooks.isEmpty || _books.isEmpty) return [];
+  return _books.where((book) => _savedBooks.contains(book.id)).toList();
   }
 
   // الحصول على تقدم القراءة لكتاب معين
@@ -426,6 +398,7 @@ class BookService extends ChangeNotifier {
     Duration? additionalReadingTime,
   Map<String, dynamic>? bookmarks,
   Map<String, dynamic>? highlights,
+  double? scrollOffset,
   }) async {
     final existingIndex = _readingProgress.indexWhere(
       (progress) => progress.bookId == bookId && progress.userId == userId,
@@ -444,6 +417,7 @@ class BookService extends ChangeNotifier {
         isCompleted: currentPage >= totalPages,
         bookmarks: bookmarks ?? existing.bookmarks,
         highlights: highlights ?? existing.highlights,
+        scrollOffset: scrollOffset ?? existing.scrollOffset,
       );
     } else {
       // إنشاء تقدم جديد
@@ -459,6 +433,7 @@ class BookService extends ChangeNotifier {
           isCompleted: currentPage >= totalPages,
           bookmarks: bookmarks ?? const {},
           highlights: highlights ?? const {},
+          scrollOffset: scrollOffset ?? 0.0,
         ),
       );
     }
@@ -509,7 +484,7 @@ class BookService extends ChangeNotifier {
     for (final p in pages) {
       final listA = List<String>.from(a.highlights[p] ?? []);
       final listB = List<String>.from(b.highlights[p] ?? []);
-      final mergedList = <String>[]..addAll(listA)..addAll(listB.where((x) => !listA.contains(x)));
+      final mergedList = <String>[...listA, ...listB.where((x) => !listA.contains(x))];
       mergedHighlights[p] = mergedList;
     }
 
@@ -521,6 +496,7 @@ class BookService extends ChangeNotifier {
       isCompleted: base.isCompleted || other.isCompleted,
       bookmarks: mergedBookmarks,
       highlights: mergedHighlights,
+  scrollOffset: base.scrollOffset > other.scrollOffset ? base.scrollOffset : other.scrollOffset,
     );
   }
 
@@ -686,7 +662,7 @@ class BookService extends ChangeNotifier {
       // If repository is present, persist remotely as well
       if (_repository != null) {
         try {
-          await _repository!.addOrUpdateBook(book);
+          await _repository.addOrUpdateBook(book);
         } catch (_) {}
       }
     } catch (e) {
@@ -713,7 +689,7 @@ class BookService extends ChangeNotifier {
     final bookId = book.id;
     try {
       _setLoading(true);
-      final fileUrl = await _repository!.addBookWithFile(
+      final fileUrl = await _repository.addBookWithFile(
         bookId: bookId,
         book: book,
         fileName: fileName,
@@ -724,7 +700,11 @@ class BookService extends ChangeNotifier {
       // update local cache
       final idx = _books.indexWhere((b) => b.id == bookId);
       final updated = book.copyWith(fileUrl: fileUrl);
-      if (idx != -1) _books[idx] = updated; else _books.add(updated);
+      if (idx != -1) {
+        _books[idx] = updated;
+      } else {
+        _books.add(updated);
+      }
       notifyListeners();
       return fileUrl;
     } catch (e) {
@@ -743,8 +723,64 @@ class BookService extends ChangeNotifier {
       _readingProgress.removeWhere((progress) => progress.bookId == bookId);
       _savedBooks.remove(bookId);
       notifyListeners();
+      try { await _repository?.deleteBook(bookId); } catch (_) {}
     } catch (e) {
       _setError('فشل في حذف الكتاب: $e');
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  /// تحديث كتاب موجود (ويمكن مع تحديث الملف أو صورة الغلاف اختيارياً)
+  Future<BookModel?> updateBook(
+    BookModel book, {
+    List<int>? newFileBytes,
+    String? newFileName,
+    String? newFileContentType,
+    void Function(double progress)? onFileProgress,
+    List<int>? coverImageBytes,
+    String? coverImageContentType,
+  }) async {
+    _setLoading(true);
+    try {
+      BookModel updated = book.copyWith(updatedAt: DateTime.now());
+
+      // رفع ملف الكتاب الجديد إن تم توفيره
+      if (newFileBytes != null && newFileName != null && newFileContentType != null && _repository != null) {
+        final fileUrl = await _repository.uploadBookFile(
+          bookId: book.id,
+          fileName: newFileName,
+          bytes: newFileBytes,
+          contentType: newFileContentType,
+          onProgress: onFileProgress,
+        );
+        updated = updated.copyWith(fileUrl: fileUrl);
+      }
+
+      // رفع صورة الغلاف الجديدة إن تم توفيرها
+      if (coverImageBytes != null && coverImageContentType != null && _repository != null) {
+        final coverUrl = await _repository.uploadCoverImage(
+          bookId: book.id,
+          bytes: coverImageBytes,
+          contentType: coverImageContentType,
+        );
+        updated = updated.copyWith(coverImageUrl: coverUrl);
+      }
+
+      // تحديث في Firestore
+      await _repository?.addOrUpdateBook(updated);
+
+      final idx = _books.indexWhere((b) => b.id == updated.id);
+      if (idx != -1) {
+        _books[idx] = updated;
+      } else {
+        _books.add(updated);
+      }
+      notifyListeners();
+      return updated;
+    } catch (e) {
+      _setError('فشل في تحديث الكتاب: $e');
+      return null;
     } finally {
       _setLoading(false);
     }
@@ -775,5 +811,11 @@ class BookService extends ChangeNotifier {
   void clearError() {
     _error = null;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _booksSub?.cancel();
+    super.dispose();
   }
 }

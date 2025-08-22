@@ -9,6 +9,7 @@ class ReadingProgressModel {
   final bool isCompleted;
   final Map<String, dynamic> bookmarks; // صفحة -> ملاحظة
   final Map<String, dynamic> highlights; // صفحة -> نص مميز
+  final double scrollOffset; // لحفظ موضع التمرير داخل الفصل/الصفحة (اختياري)
 
   ReadingProgressModel({
     required this.id,
@@ -21,6 +22,7 @@ class ReadingProgressModel {
     this.isCompleted = false,
     this.bookmarks = const {},
     this.highlights = const {},
+  this.scrollOffset = 0.0,
   });
 
   // نسبة التقدم (0.0 - 1.0)
@@ -42,6 +44,7 @@ class ReadingProgressModel {
       isCompleted: data['isCompleted'] ?? false,
       bookmarks: Map<String, dynamic>.from(data['bookmarks'] ?? {}),
       highlights: Map<String, dynamic>.from(data['highlights'] ?? {}),
+  scrollOffset: (data['scrollOffset'] is num) ? (data['scrollOffset'] as num).toDouble() : 0.0,
     );
   }
 
@@ -58,6 +61,7 @@ class ReadingProgressModel {
       'isCompleted': isCompleted,
       'bookmarks': bookmarks,
       'highlights': highlights,
+  'scrollOffset': scrollOffset,
     };
   }
 
@@ -73,6 +77,7 @@ class ReadingProgressModel {
     bool? isCompleted,
     Map<String, dynamic>? bookmarks,
     Map<String, dynamic>? highlights,
+    double? scrollOffset,
   }) {
     return ReadingProgressModel(
       id: id ?? this.id,
@@ -85,6 +90,7 @@ class ReadingProgressModel {
       isCompleted: isCompleted ?? this.isCompleted,
       bookmarks: bookmarks ?? this.bookmarks,
       highlights: highlights ?? this.highlights,
+      scrollOffset: scrollOffset ?? this.scrollOffset,
     );
   }
 

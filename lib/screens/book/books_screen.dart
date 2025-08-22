@@ -359,7 +359,7 @@ class _BooksScreenState extends State<BooksScreen> with TickerProviderStateMixin
                   });
                 },
               );
-            }).toList(),
+            }),
             const SizedBox(height: 8),
             // Author filter
             TextField(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../services/auth_service.dart';
+// استبدال AuthService بـ AuthFirebaseService الموحدة
+import '../../services/auth_firebase_service.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -30,8 +31,8 @@ class _LoginScreenState extends State<LoginScreen> {
         _isLoading = true;
       });
 
-      final authService = Provider.of<AuthService>(context, listen: false);
-      final error = await authService.signInWithEmail(
+      final authService = Provider.of<AuthFirebaseService>(context, listen: false);
+      final error = await authService.signIn(
         _emailController.text.trim(),
         _passwordController.text,
       );
@@ -59,128 +60,124 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primary = theme.colorScheme.primary;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('تسجيل الدخول'),
-        centerTitle: true,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // شعار التطبيق
-              Icon(
-                Icons.book,
-                size: 80,
-                color: Theme.of(context).primaryColor,
-              ),
-              const SizedBox(height: 16),
-              
-              Text(
-                'مرحباً بك في قارئ الكتب',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 32),
-
-              // حقل الإيميل
-              TextFormField(
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                textDirection: TextDirection.ltr,
-                decoration: const InputDecoration(
-                  labelText: 'البريد الإلكتروني',
-                  prefixIcon: Icon(Icons.email),
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'يرجى إدخال البريد الإلكتروني';
-                  }
-                  if (!value.contains('@')) {
-                    return 'يرجى إدخال بريد إلكتروني صالح';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // حقل كلمة المرور
-              TextFormField(
-                controller: _passwordController,
-                obscureText: _obscurePassword,
-                decoration: InputDecoration(
-                  labelText: 'كلمة المرور',
-                  prefixIcon: const Icon(Icons.lock),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscurePassword ? Icons.visibility : Icons.visibility_off,
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [primary.withOpacity(.9), primary.withOpacity(.6)],
+            begin: Alignment.topRight,
+            end: Alignment.bottomLeft,
+          ),
+        ),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Card(
+                elevation: 10,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(28, 36, 28, 32),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: primary.withOpacity(.1),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Icon(Icons.menu_book_rounded, size: 40, color: primary),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 18),
+                        Text('مرحباً بك', textAlign: TextAlign.center, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 6),
+                        Text('سجّل الدخول لمتابعة قراءاتك', textAlign: TextAlign.center, style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey[600])),
+                        const SizedBox(height: 32),
+                        TextFormField(
+                          controller: _emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          textDirection: TextDirection.ltr,
+                          decoration: InputDecoration(
+                            labelText: 'البريد الإلكتروني',
+                            prefixIcon: const Icon(Icons.email_outlined),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) return 'يرجى إدخال البريد الإلكتروني';
+                            if (!value.contains('@')) return 'يرجى إدخال بريد إلكتروني صالح';
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 18),
+                        TextFormField(
+                          controller: _passwordController,
+                          obscureText: _obscurePassword,
+                          decoration: InputDecoration(
+                            labelText: 'كلمة المرور',
+                            prefixIcon: const Icon(Icons.lock_outline),
+                            suffixIcon: IconButton(
+                              icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
+                              onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                            ),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                          ),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) return 'يرجى إدخال كلمة المرور';
+                            if (value.length < 6) return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton(
+                            onPressed: _showForgotPasswordDialog,
+                            child: const Text('نسيت كلمة المرور؟'),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          height: 54,
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _signIn,
+                            style: ElevatedButton.styleFrom(
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                              textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                            ),
+                            child: _isLoading
+                                ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                : const Text('تسجيل الدخول'),
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Text('ليس لديك حساب؟'),
+                            TextButton(
+                              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RegisterScreen())),
+                              child: const Text('إنشاء حساب جديد'),
+                            )
+                          ],
+                        )
+                      ],
                     ),
-                    onPressed: () {
-                      setState(() {
-                        _obscurePassword = !_obscurePassword;
-                      });
-                    },
-                  ),
-                  border: const OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'يرجى إدخال كلمة المرور';
-                  }
-                  if (value.length < 6) {
-                    return 'كلمة المرور يجب أن تكون 6 أحرف على الأقل';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 24),
-
-              // زر تسجيل الدخول
-              ElevatedButton(
-                onPressed: _isLoading ? null : _signIn,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                child: _isLoading
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text(
-                        'تسجيل الدخول',
-                        style: TextStyle(fontSize: 16),
-                      ),
               ),
-              const SizedBox(height: 16),
-
-              // رابط نسيت كلمة المرور
-              TextButton(
-                onPressed: () {
-                  _showForgotPasswordDialog();
-                },
-                child: const Text('نسيت كلمة المرور؟'),
-              ),
-              const SizedBox(height: 8),
-
-              // رابط إنشاء حساب جديد
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const RegisterScreen(),
-                    ),
-                  );
-                },
-                child: const Text('ليس لديك حساب؟ إنشاء حساب جديد'),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -219,7 +216,7 @@ class _LoginScreenState extends State<LoginScreen> {
             onPressed: () async {
               final email = emailController.text.trim();
               if (email.isNotEmpty) {
-                final authService = Provider.of<AuthService>(context, listen: false);
+                final authService = Provider.of<AuthFirebaseService>(context, listen: false);
                 final error = await authService.resetPassword(email);
                 
                 if (mounted) {

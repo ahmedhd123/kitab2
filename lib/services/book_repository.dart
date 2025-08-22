@@ -1,8 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'dart:typed_data';
+import 'dart:async';
 import '../models/book_model.dart';
 import '../models/reading_progress_model.dart';
+import 'package:flutter/foundation.dart';
 
 /// مستودع للتعامل مع Firestore لعناصر الكتب والتقدم
 class BookRepository {
@@ -76,6 +77,9 @@ class BookRepository {
     final storage = FirebaseStorage.instance;
     final ref = storage.ref().child('books').child(bookId).child(fileName);
     final metadata = SettableMetadata(contentType: contentType);
+    if (kDebugMode) {
+      debugPrint('[uploadBookFile] START bookId=$bookId file=$fileName bytes=${bytes.length} contentType=$contentType fullPath=${ref.fullPath}');
+    }
     final uploadTask = ref.putData(Uint8List.fromList(bytes), metadata);
 
     // Listen to snapshot events and report progress if requested.
@@ -87,15 +91,35 @@ class BookRepository {
           final p = transferred / total;
           onProgress?.call(p);
         }
+        if (kDebugMode) {
+          debugPrint('[uploadBookFile] state=${snapshot.state} transferred=$transferred/$total (${total == 0 ? 0 : (transferred/total*100).toStringAsFixed(2)}%)');
+        }
       } catch (_) {}
+    }, onError: (error, st) {
+      if (kDebugMode) debugPrint('[uploadBookFile] snapshot stream error: $error');
     });
 
     try {
       // Set an upper bound to avoid infinite wait; 10 minutes for large files.
-      final snapshot = await uploadTask.whenComplete(() {}).timeout(const Duration(minutes: 10));
+      final snapshot = await uploadTask
+          .whenComplete(() {})
+          .timeout(const Duration(minutes: 10), onTimeout: () {
+        if (kDebugMode) debugPrint('[uploadBookFile] TIMEOUT after 10 minutes');
+        throw TimeoutException('Upload timed out');
+      });
       final url = await snapshot.ref.getDownloadURL();
       onProgress?.call(1.0);
+      if (kDebugMode) debugPrint('[uploadBookFile] SUCCESS url=$url');
       return url;
+    } on TimeoutException catch (e) {
+      if (kDebugMode) debugPrint('[uploadBookFile] Caught TimeoutException: $e');
+      rethrow;
+    } on FirebaseException catch (e) {
+      if (kDebugMode) debugPrint('[uploadBookFile] FirebaseException code=${e.code} message=${e.message}');
+      rethrow;
+    } catch (e) {
+      if (kDebugMode) debugPrint('[uploadBookFile] ERROR $e');
+      rethrow;
     } finally {
       await sub.cancel();
     }
@@ -110,14 +134,41 @@ class BookRepository {
     required String contentType,
   void Function(double progress)? onProgress,
   }) async {
-  final fileUrl = await uploadBookFile(bookId: bookId, fileName: fileName, bytes: bytes, contentType: contentType, onProgress: onProgress);
+    final fileUrl = await uploadBookFile(
+        bookId: bookId,
+        fileName: fileName,
+        bytes: bytes,
+        contentType: contentType,
+        onProgress: onProgress);
     final updated = book.copyWith(fileUrl: fileUrl, uploadedBy: book.uploadedBy);
-    await addOrUpdateBook(updated);
+    try {
+      await addOrUpdateBook(updated);
+    } catch (e) {
+      if (kDebugMode) debugPrint('[addBookWithFile] Firestore write failed but returning fileUrl anyway: $e');
+    }
     return fileUrl;
   }
 
   Future<void> incrementDownload(String bookId) async {
     await _booksCol.doc(bookId).update({'downloadCount': FieldValue.increment(1)});
+  }
+
+  /// حذف كتاب من Firestore (لا يحذف الملف من Storage لتبسيط التنفيذ حالياً)
+  Future<void> deleteBook(String bookId) async {
+    await _booksCol.doc(bookId).delete();
+  }
+
+  /// رفع صورة غلاف للكتاب books/{bookId}/cover.jpg وإرجاع الرابط
+  Future<String> uploadCoverImage({
+    required String bookId,
+    required List<int> bytes,
+    required String contentType,
+  }) async {
+    final storage = FirebaseStorage.instance;
+    final ref = storage.ref().child('books').child(bookId).child('cover.jpg');
+    final metadata = SettableMetadata(contentType: contentType);
+    await ref.putData(Uint8List.fromList(bytes), metadata);
+    return await ref.getDownloadURL();
   }
 
   Future<ReadingProgressModel?> getProgress(String userId, String bookId) async {
@@ -169,7 +220,7 @@ class BookRepository {
     final now = DateTime.now();
     if (existing == null) {
       final newP = ReadingProgressModel(
-        id: '${userId}_${bookId}',
+        id: '${userId}_$bookId',
         userId: userId,
         bookId: bookId,
         currentPage: currentPage,
@@ -210,9 +261,11 @@ class BookRepository {
       id: doc.id,
       title: data['title'] ?? '',
       author: data['author'] ?? '',
+  authorBio: data['authorBio'] ?? '',
       description: data['description'] ?? '',
       category: data['category'] ?? '',
       coverImageUrl: data['coverImageUrl'] ?? '',
+  bookSummary: data['bookSummary'] ?? '',
       fileUrl: data['fileUrl'] ?? '',
       fileType: data['fileType'] ?? 'pdf',
       averageRating: (data['averageRating'] ?? 0).toDouble(),
@@ -221,6 +274,7 @@ class BookRepository {
       uploadedBy: data['uploadedBy'] ?? '',
       createdAt: createdAt,
       updatedAt: updatedAt,
+  releaseDate: data['releaseDate'] != null ? DateTime.tryParse(data['releaseDate'].toString()) : null,
       tags: List<String>.from(data['tags'] ?? []),
       pageCount: data['pageCount'] ?? 0,
       language: data['language'] ?? 'ar',

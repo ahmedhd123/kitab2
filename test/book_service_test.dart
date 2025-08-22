@@ -67,7 +67,7 @@ class FakeRepo implements BookRepository {
   Future<String> uploadBookFile({required String bookId, required String fileName, required List<int> bytes, required String contentType, void Function(double)? onProgress}) async {
     if (fail) throw Exception('network');
     // return a fake URL
-    return 'https://example.com/${bookId}/${fileName}';
+    return 'https://example.com/$bookId/$fileName';
   }
 
   @override
@@ -97,7 +97,7 @@ void main() {
   test('updateReadingProgress happy path updates local and calls repo', () async {
     final repo = FakeRepo(fail: false);
     final svc = BookService(repository: repo);
-    await svc.updateReadingProgress(bookId: 'b1', userId: 'u1', currentPage: 5, totalPages: 10, additionalReadingTime: Duration(seconds: 30));
+    await svc.updateReadingProgress(bookId: 'b1', userId: 'u1', currentPage: 5, totalPages: 10, additionalReadingTime: const Duration(seconds: 30));
     final p = svc.getReadingProgress('b1', 'u1');
     expect(p, isNotNull);
     expect(p!.currentPage, 5);
@@ -107,7 +107,7 @@ void main() {
   test('updateReadingProgress network failure sets sync failed but keeps local', () async {
     final repo = FakeRepo(fail: true);
     final svc = BookService(repository: repo);
-    await svc.updateReadingProgress(bookId: 'b2', userId: 'u2', currentPage: 3, totalPages: 20, additionalReadingTime: Duration(seconds: 20));
+    await svc.updateReadingProgress(bookId: 'b2', userId: 'u2', currentPage: 3, totalPages: 20, additionalReadingTime: const Duration(seconds: 20));
     final p = svc.getReadingProgress('b2', 'u2');
     expect(p, isNotNull);
     expect(p!.currentPage, 3);

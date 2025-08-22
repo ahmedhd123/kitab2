@@ -17,9 +17,15 @@ class ReviewService extends ChangeNotifier {
           .get();
       if (existing.docs.isNotEmpty) {
         final docId = existing.docs.first.id;
-        await _firestore.collection('reviews').doc(docId).update(review.toMap());
+        await _firestore.collection('reviews').doc(docId).update({
+          ...review.toMap(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
       } else {
-        await _firestore.collection('reviews').add(review.toMap());
+        final map = review.toMap();
+        map['createdAt'] = FieldValue.serverTimestamp();
+        map['updatedAt'] = FieldValue.serverTimestamp();
+        await _firestore.collection('reviews').add(map);
       }
       
       // تحديث متوسط التقييم للكتاب
@@ -38,15 +44,17 @@ class ReviewService extends ChangeNotifier {
   // جلب مراجعات كتاب معين
   Future<List<ReviewModel>> getBookReviews(String bookId) async {
     try {
-      final querySnapshot = await _firestore
-          .collection('reviews')
-          .where('bookId', isEqualTo: bookId)
-          .orderBy('createdAt', descending: true)
-          .get();
+    // إزالة orderBy لتفادي الحاجة إلى فهرس مركب، ثم الفرز محلياً
+    final querySnapshot = await _firestore
+      .collection('reviews')
+      .where('bookId', isEqualTo: bookId)
+      .get();
 
-      return querySnapshot.docs
-          .map((doc) => ReviewModel.fromFirestore(doc))
-          .toList();
+    final list = querySnapshot.docs
+      .map((doc) => ReviewModel.fromFirestore(doc))
+      .toList();
+    list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return list;
     } catch (e, st) {
       if (e is FirebaseException) {
         print('Firestore FirebaseException in getBookReviews: code=${e.code}, message=${e.message}');
@@ -60,10 +68,10 @@ class ReviewService extends ChangeNotifier {
   // تحديث مراجعة
   Future<void> updateReview(String reviewId, ReviewModel updatedReview) async {
     try {
-      await _firestore
-          .collection('reviews')
-          .doc(reviewId)
-          .update(updatedReview.toMap());
+      await _firestore.collection('reviews').doc(reviewId).update({
+        ...updatedReview.toMap(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
       
       // تحديث متوسط التقييم للكتاب
       await _updateBookAverageRating(updatedReview.bookId);

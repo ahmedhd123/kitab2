@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../services/auth_service.dart';
+import '../../services/auth_firebase_service.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -47,12 +47,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
 
     try {
-      final authService = Provider.of<AuthService>(context, listen: false);
-      await authService.registerWithEmail(
+      final authService = Provider.of<AuthFirebaseService>(context, listen: false);
+      final error = await authService.register(
         _emailController.text.trim(),
         _passwordController.text,
         _nameController.text.trim(),
       );
+
+      if (error != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(error), backgroundColor: Colors.red),
+          );
+        }
+        return;
+      }
 
       if (mounted) {
         // إظهار رسالة نجاح

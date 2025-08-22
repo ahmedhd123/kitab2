@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart'; // لـ ChangeNotifier
+// (debugPrint replaced with print for simplicity)
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../firebase_options.dart';
 
@@ -18,12 +19,16 @@ class AuthFirebaseService extends ChangeNotifier {
       return 'Firebase غير مكوّن. شغّل "flutterfire configure" وحدث ملف firebase_options.dart';
     }
     try {
+  print('[AuthFirebaseService] signIn attempt email=$email');
       await _auth.signInWithEmailAndPassword(email: email, password: password);
+  print('[AuthFirebaseService] signIn success uid=${_auth.currentUser?.uid}');
       notifyListeners();
       return null;
     } on FirebaseAuthException catch (e) {
+  print('[AuthFirebaseService] signIn FirebaseAuthException code=${e.code} message=${e.message}');
       return _mapError(e.code);
-    } catch (_) {
+    } catch (e) {
+  print('[AuthFirebaseService] signIn unknown error: $e');
       return 'حدث خطأ غير متوقع';
     }
   }
@@ -33,6 +38,7 @@ class AuthFirebaseService extends ChangeNotifier {
       return 'Firebase غير مكوّن. شغّل "flutterfire configure" وحدث ملف firebase_options.dart';
     }
     try {
+  print('[AuthFirebaseService] register attempt email=$email name=$name');
       final cred = await _auth.createUserWithEmailAndPassword(email: email, password: password);
       await cred.user?.updateDisplayName(name);
       await _db.collection('users').doc(cred.user!.uid).set({
@@ -41,11 +47,32 @@ class AuthFirebaseService extends ChangeNotifier {
         'displayName': name,
         'createdAt': FieldValue.serverTimestamp(),
       });
+  print('[AuthFirebaseService] register success uid=${cred.user?.uid}');
+      // إرسال بريد تحقق إن أمكن
+      try {
+        if (cred.user != null && !cred.user!.emailVerified) {
+          await cred.user!.sendEmailVerification();
+        }
+      } catch (_) {}
       notifyListeners();
       return null;
     } on FirebaseAuthException catch (e) {
+  print('[AuthFirebaseService] register FirebaseAuthException code=${e.code} message=${e.message}');
       return _mapError(e.code);
-    } catch (_) {
+    } catch (e) {
+  print('[AuthFirebaseService] register unknown error: $e');
+      return 'حدث خطأ غير متوقع';
+    }
+  }
+
+  /// إعادة تعيين كلمة المرور عبر البريد الإلكتروني
+  Future<String?> resetPassword(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email);
+      return null; // نجاح
+    } on FirebaseAuthException catch (e) {
+      return _mapError(e.code);
+    } catch (e) {
       return 'حدث خطأ غير متوقع';
     }
   }
@@ -53,8 +80,8 @@ class AuthFirebaseService extends ChangeNotifier {
   bool _isFirebaseConfigured() {
     // Detect obvious placeholders in firebase_options.dart
     final opts = DefaultFirebaseOptions.currentPlatform;
-    final key = opts.apiKey ?? '';
-    final project = opts.projectId ?? '';
+  final key = opts.apiKey;
+  final project = opts.projectId;
     if (key.isEmpty || project.isEmpty) return false;
     if (key.contains('API_KEY') || key.contains('WEB_API_KEY') || project.contains('YOUR_PROJECT_ID')) {
       return false;
