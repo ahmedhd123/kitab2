@@ -16,6 +16,10 @@ import 'screens/home/home_screen.dart';
 import 'utils/app_theme.dart';
 import 'screens/splash_screen.dart';
 import 'services/theme_service.dart';
+import 'services/plan_service.dart';
+import 'services/reading_list_service.dart';
+import 'services/external_book_search_service.dart';
+import 'screens/plans/plans_hub_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -56,6 +60,10 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (context) => ThemeService()),
         // Register ReviewService so screens can read/write reviews via Provider
         ChangeNotifierProvider(create: (context) => ReviewService()),
+  // خدمات الخطط والقوائم والبحث الخارجي
+  ChangeNotifierProvider(create: (context) => PlanService()),
+  ChangeNotifierProvider(create: (context) => ReadingListService()),
+  ChangeNotifierProvider(create: (context) => ExternalBookSearchService()),
       ],
       child: Consumer<ThemeService>(
         builder: (context, themeService, child) {
@@ -81,6 +89,7 @@ class MyApp extends StatelessWidget {
             routes: {
               '/home': (context) => const HomeScreen(),
               '/login': (context) => const LoginScreen(),
+              '/plans': (context) => const PlansHubScreen(),
             },
             debugShowCheckedModeBanner: false,
             home: Builder(

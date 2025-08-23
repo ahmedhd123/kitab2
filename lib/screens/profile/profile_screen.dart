@@ -3,271 +3,132 @@ import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/auth_firebase_service.dart';
+import 'my_reviews_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final auth = Provider.of<AuthFirebaseService>(context);
+    final auth = context.watch<AuthFirebaseService>();
     final user = auth.currentUser;
+
+    if (user == null) {
+      return Scaffold(appBar: AppBar(title: const Text('الملف الشخصي')), body: _buildLoggedOutState(context));
+    }
+
+    final userDocStream = FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots();
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('الملف الشخصي'),
         automaticallyImplyLeading: false,
         actions: [
-          if (user != null)
-            IconButton(
-              tooltip: 'تعديل الملف',
-              icon: const Icon(Icons.edit),
-              onPressed: () => _showEditProfileSheet(context, auth),
-            ),
+          IconButton(
+            tooltip: 'تعديل الملف',
+            icon: const Icon(Icons.edit),
+            onPressed: () => _showEditProfileSheet(context, auth),
+          ),
         ],
       ),
-      body: user == null
-          ? _buildLoggedOutState(context)
-          : StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-              stream: FirebaseFirestore.instance.collection('users').doc(user.uid).snapshots(),
-              builder: (context, snapshot) {
-                final data = snapshot.data?.data() ?? {};
-                final displayName = data['displayName'] as String? ?? user.displayName ?? 'مستخدم';
-                final email = user.email ?? '';
-                final photoURL = data['photoURL'] as String? ?? user.photoURL;
-                final bio = data['bio'] as String? ?? '';
+      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+        stream: userDocStream,
+        builder: (context, snapshot) {
+          final data = snapshot.data?.data() ?? {};
+          final displayName = (data['displayName'] as String?)?.trim().isNotEmpty == true
+              ? (data['displayName'] as String)
+              : (user.displayName ?? 'مستخدم');
+          final email = user.email ?? '';
+          final photoURL = (data['photoURL'] as String?)?.isNotEmpty == true ? data['photoURL'] as String : user.photoURL;
+          final bio = data['bio'] as String? ?? '';
 
-                return SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      // معلومات المستخدم
-                      Card(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Column(
-                            children: [
-                              Stack(
-                                alignment: Alignment.bottomLeft,
-                                children: [
-                                  CircleAvatar(
-                                    radius: 50,
-                                    backgroundColor: Theme.of(context).primaryColor,
-                                    backgroundImage: (photoURL != null && photoURL.isNotEmpty)
-                                        ? NetworkImage(photoURL)
-                                        : null,
-                                    child: (photoURL == null || photoURL.isEmpty)
-                                        ? Text(
-                                            (displayName.isNotEmpty ? displayName[0] : 'U').toUpperCase(),
-                                            style: const TextStyle(
-                                              fontSize: 32,
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          )
-                                        : null,
-                                  ),
-                                  Positioned(
-                                    bottom: 0,
-                                    left: 0,
-                                    child: InkWell(
-                                      onTap: () => _changeAvatar(context, auth),
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          color: Theme.of(context).colorScheme.primary,
-                                          borderRadius: BorderRadius.circular(20),
-                                        ),
-                                        padding: const EdgeInsets.all(6),
-                                        child: const Icon(Icons.camera_alt, color: Colors.white, size: 18),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                displayName,
-                                style: Theme.of(context).textTheme.titleLarge,
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                email,
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                      color: Colors.grey[600],
-                                    ),
-                              ),
-                              if (bio.isNotEmpty) ...[
-                                const SizedBox(height: 12),
-                                Text(
-                                  bio,
-                                  textAlign: TextAlign.center,
-                                  style: Theme.of(context).textTheme.bodyMedium,
-                                )
+          return CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: _HeaderCard(
+                  name: displayName,
+                  email: email,
+                  photoURL: photoURL,
+                  bio: bio,
+                  onChangeAvatar: () => _changeAvatar(context, auth),
+                  emailVerified: user.emailVerified,
+                  onVerifyEmail: auth.sendEmailVerification,
+                ),
+              ),
+              SliverToBoxAdapter(child: const SizedBox(height: 12)),
+              // إحصاءات سريعة حيّة
+              SliverToBoxAdapter(
+                child: _LiveStatsRow(userId: user.uid),
+              ),
+              SliverToBoxAdapter(child: const SizedBox(height: 16)),
+              SliverToBoxAdapter(child: _QuickActions()),
+              SliverToBoxAdapter(child: const SizedBox(height: 24)),
+              // إعدادات/مساعدة
+      SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                sliver: SliverList(
+                  delegate: SliverChildListDelegate.fixed([
+                    _SettingsTile(icon: Icons.settings, title: 'الإعدادات', onTap: () {}),
+                    const Divider(height: 0),
+        _SettingsTile(icon: Icons.help_outline, title: 'المساعدة', onTap: () {}),
+                    const Divider(height: 0),
+                    _SettingsTile(
+                      icon: Icons.info_outline,
+                      title: 'حول التطبيق',
+                      onTap: () {
+                        showAboutDialog(
+                          context: context,
+                          applicationName: 'قارئ الكتب',
+                          applicationVersion: '1.0.0',
+                          children: const [Text('تطبيق لقراءة الكتب الإلكترونية وتقييمها')],
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    _SettingsTile(
+                      icon: Icons.reviews,
+                      title: 'مراجعاتي',
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const MyReviewsScreen()),
+                      ),
+                    ),
+                    const Divider(height: 0),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () async {
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('تأكيد تسجيل الخروج'),
+                              content: const Text('هل أنت متأكد من رغبتك في تسجيل الخروج؟'),
+                              actions: [
+                                TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')),
+                                ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('تسجيل الخروج')),
                               ],
-                              if (!user.emailVerified) ...[
-                                const SizedBox(height: 16),
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.orange[100],
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.warning, color: Colors.orange[700]),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          'يرجى التحقق من بريدك الإلكتروني',
-                                          style: TextStyle(color: Colors.orange[700]),
-                                        ),
-                                      ),
-                                      TextButton(
-                                        onPressed: () async {
-                                          await auth.sendEmailVerification();
-                                          if (context.mounted) {
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              const SnackBar(content: Text('تم إرسال رسالة التحقق')),
-                                            );
-                                          }
-                                        },
-                                        child: const Text('إرسال'),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-
-                      // خيارات الملف الشخصي
-                      Card(
-                        child: Column(
-                          children: [
-                            ListTile(
-                              leading: const Icon(Icons.person_outline),
-                              title: const Text('تعديل المعلومات'),
-                              trailing: const Icon(Icons.chevron_left),
-                              onTap: () => _showEditProfileSheet(context, auth),
                             ),
-                            const Divider(),
-                            ListTile(
-                              leading: const Icon(Icons.book),
-                              title: const Text('كتبي'),
-                              trailing: const Icon(Icons.chevron_left),
-                              onTap: () {
-                                // TODO: انتقال لصفحة كتب المستخدم
-                              },
-                            ),
-                            const Divider(),
-                            ListTile(
-                              leading: const Icon(Icons.history),
-                              title: const Text('سجل القراءة'),
-                              trailing: const Icon(Icons.chevron_left),
-                              onTap: () {
-                                // TODO: انتقال لصفحة سجل القراءة
-                              },
-                            ),
-                            const Divider(),
-                            ListTile(
-                              leading: const Icon(Icons.star),
-                              title: const Text('مراجعاتي'),
-                              trailing: const Icon(Icons.chevron_left),
-                              onTap: () {
-                                // TODO: انتقال لصفحة مراجعات المستخدم
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-
-                      // الإعدادات
-                      Card(
-                        child: Column(
-                          children: [
-                            ListTile(
-                              leading: const Icon(Icons.settings),
-                              title: const Text('الإعدادات'),
-                              trailing: const Icon(Icons.chevron_left),
-                              onTap: () {
-                                // TODO: انتقال لصفحة الإعدادات
-                              },
-                            ),
-                            const Divider(),
-                            ListTile(
-                              leading: const Icon(Icons.help),
-                              title: const Text('المساعدة'),
-                              trailing: const Icon(Icons.chevron_left),
-                              onTap: () {
-                                // TODO: انتقال لصفحة المساعدة
-                              },
-                            ),
-                            const Divider(),
-                            ListTile(
-                              leading: const Icon(Icons.info),
-                              title: const Text('حول التطبيق'),
-                              trailing: const Icon(Icons.chevron_left),
-                              onTap: () {
-                                showAboutDialog(
-                                  context: context,
-                                  applicationName: 'قارئ الكتب',
-                                  applicationVersion: '1.0.0',
-                                  children: const [
-                                    Text('تطبيق لقراءة الكتب الإلكترونية وتقييمها'),
-                                  ],
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-
-                      // زر تسجيل الخروج
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () async {
-                            final confirm = await showDialog<bool>(
-                              context: context,
-                              builder: (context) => AlertDialog(
-                                title: const Text('تأكيد تسجيل الخروج'),
-                                content: const Text('هل أنت متأكد من رغبتك في تسجيل الخروج؟'),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(context, false),
-                                    child: const Text('إلغاء'),
-                                  ),
-                                  ElevatedButton(
-                                    onPressed: () => Navigator.pop(context, true),
-                                    child: const Text('تسجيل الخروج'),
-                                  ),
-                                ],
-                              ),
-                            );
-
-                            if (confirm == true) {
-                              await auth.signOut();
-                              if (context.mounted) {
-                                Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
-                              }
+                          );
+                          if (confirm == true) {
+                            await auth.signOut();
+                            if (context.mounted) {
+                              Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
                             }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                          ),
-                          child: const Text('تسجيل الخروج'),
-                        ),
+                          }
+                        },
+                        icon: const Icon(Icons.logout),
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red, padding: const EdgeInsets.symmetric(vertical: 14)),
+                        label: const Text('تسجيل الخروج'),
                       ),
-                    ],
-                  ),
-                );
-              },
-            ),
+                    ),
+                    const SizedBox(height: 24),
+                  ]),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -326,10 +187,10 @@ class ProfileScreen extends StatelessWidget {
     final user = auth.currentUser;
     if (user == null) return;
 
-    final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-    final data = doc.data() ?? {};
-    final nameController = TextEditingController(text: data['displayName'] as String? ?? user.displayName ?? '');
-    final bioController = TextEditingController(text: data['bio'] as String? ?? '');
+  final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+  final data = doc.data() ?? {};
+  final nameController = TextEditingController(text: (data['displayName'] as String?) ?? (user.displayName ?? ''));
+  final bioController = TextEditingController(text: data['bio'] as String? ?? '');
     final formKey = GlobalKey<FormState>();
 
     // ignore: use_build_context_synchronously
@@ -391,6 +252,245 @@ class ProfileScreen extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _HeaderCard extends StatelessWidget {
+  final String name;
+  final String email;
+  final String? photoURL;
+  final String bio;
+  final VoidCallback onChangeAvatar;
+  final bool emailVerified;
+  final Future<void> Function() onVerifyEmail;
+
+  const _HeaderCard({
+    required this.name,
+    required this.email,
+    required this.photoURL,
+    required this.bio,
+    required this.onChangeAvatar,
+    required this.emailVerified,
+    required this.onVerifyEmail,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(colors: [cs.primary.withOpacity(0.10), cs.secondary.withOpacity(0.10)]),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: cs.primary.withOpacity(0.15)),
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Stack(
+              alignment: Alignment.bottomLeft,
+              children: [
+                CircleAvatar(
+                  radius: 48,
+                  backgroundColor: cs.primary,
+                  backgroundImage: (photoURL != null && photoURL!.isNotEmpty) ? NetworkImage(photoURL!) : null,
+                  child: (photoURL == null || photoURL!.isEmpty)
+                      ? Text(name.isNotEmpty ? name.characters.first.toUpperCase() : 'U',
+                          style: const TextStyle(fontSize: 28, color: Colors.white, fontWeight: FontWeight.bold))
+                      : null,
+                ),
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  child: InkWell(
+                    onTap: onChangeAvatar,
+                    child: Container(
+                      decoration: BoxDecoration(color: cs.primary, borderRadius: BorderRadius.circular(20)),
+                      padding: const EdgeInsets.all(6),
+                      child: const Icon(Icons.camera_alt, color: Colors.white, size: 18),
+                    ),
+                  ),
+                )
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(name, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 4),
+            Text(email, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[700])),
+            if (bio.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(bio, textAlign: TextAlign.center),
+            ],
+            if (!emailVerified) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Colors.orange[100], borderRadius: BorderRadius.circular(8)),
+                child: Row(children: [
+                  Icon(Icons.warning, color: Colors.orange[700]),
+                  const SizedBox(width: 8),
+                  const Expanded(child: Text('يرجى التحقق من بريدك الإلكتروني')),
+                  TextButton(onPressed: onVerifyEmail, child: const Text('إرسال')),
+                ]),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LiveStatsRow extends StatelessWidget {
+  final String userId;
+  const _LiveStatsRow({required this.userId});
+
+  @override
+  Widget build(BuildContext context) {
+    final db = FirebaseFirestore.instance;
+    final plans$ = db.collection('reading_plans').where('userId', isEqualTo: userId).snapshots();
+    final lists$ = db.collection('reading_lists').where('userId', isEqualTo: userId).snapshots();
+    final reviews$ = db.collection('reviews').where('userId', isEqualTo: userId).snapshots();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          Expanded(child: _CountCard(stream: plans$, label: 'الخطط', icon: Icons.flag_rounded, color: Colors.teal)),
+          const SizedBox(width: 8),
+          Expanded(child: _CountCard(stream: lists$, label: 'القوائم', icon: Icons.list_alt_rounded, color: Colors.indigo)),
+          const SizedBox(width: 8),
+          Expanded(child: _CountCard(stream: reviews$, label: 'المراجعات', icon: Icons.reviews, color: Colors.purple)),
+        ],
+      ),
+    );
+  }
+}
+
+class _CountCard extends StatelessWidget {
+  final Stream<QuerySnapshot<Map<String, dynamic>>> stream;
+  final String label;
+  final IconData icon;
+  final Color color;
+
+  const _CountCard({
+    required this.stream,
+    required this.label,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: stream,
+      builder: (context, snapshot) {
+        final count = snapshot.data?.docs.length ?? 0;
+        return Material(
+          color: color.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(12)),
+                  child: Icon(icon, color: Colors.white),
+                ),
+                const SizedBox(width: 12),
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w700)),
+                  Text('$count عنصر', style: Theme.of(context).textTheme.bodySmall),
+                ])
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _QuickActions extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: _ActionButton(
+              color: cs.primary,
+              icon: Icons.flag_rounded,
+              label: 'إنشاء خطة',
+              onTap: () => Navigator.pushNamed(context, '/plans'),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _ActionButton(
+              color: cs.secondary,
+              icon: Icons.list_alt_rounded,
+              label: 'قوائم القراءة',
+              onTap: () => Navigator.pushNamed(context, '/plans'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  final Color color;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _ActionButton({required this.color, required this.icon, required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: color.withOpacity(0.08),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: color),
+              const SizedBox(width: 8),
+              Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w700)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+
+  const _SettingsTile({required this.icon, required this.title, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(title),
+      trailing: const Icon(Icons.chevron_left),
+      onTap: onTap,
     );
   }
 }

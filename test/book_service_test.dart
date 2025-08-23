@@ -88,6 +88,15 @@ class FakeRepo implements BookRepository {
 
   @override
   Future<List<String>> getUserLibraryByStatus(String userId, String status) async => [];
+
+  @override
+  Future<void> deleteBook(String bookId) async {}
+
+  @override
+  Future<String> uploadCoverImage({required String bookId, required List<int> bytes, required String contentType}) async {
+    if (fail) throw Exception('network');
+    return 'https://example.com/$bookId/cover.jpg';
+  }
 }
 
 // For merge tests we don't need a repository; we'll call mergeProgress directly on BookService.

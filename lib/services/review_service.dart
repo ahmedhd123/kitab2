@@ -108,12 +108,11 @@ class ReviewService extends ChangeNotifier {
       final querySnapshot = await _firestore
           .collection('reviews')
           .where('userId', isEqualTo: userId)
-          .orderBy('createdAt', descending: true)
           .get();
 
-      return querySnapshot.docs
-          .map((doc) => ReviewModel.fromFirestore(doc))
-          .toList();
+      final list = querySnapshot.docs.map((doc) => ReviewModel.fromFirestore(doc)).toList();
+      list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return list;
     } catch (e, st) {
       if (e is FirebaseException) {
         print('Firestore FirebaseException in getUserReviews: code=${e.code}, message=${e.message}');
@@ -122,6 +121,19 @@ class ReviewService extends ChangeNotifier {
       print(st);
       return [];
     }
+  }
+
+  // بث حي لمراجعات المستخدم (مُرتّبة محلياً)
+  Stream<List<ReviewModel>> watchUserReviews(String userId) {
+    return _firestore
+        .collection('reviews')
+        .where('userId', isEqualTo: userId)
+        .snapshots()
+        .map((s) {
+          final list = s.docs.map((d) => ReviewModel.fromFirestore(d)).toList();
+          list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return list;
+        });
   }
 
   // التحقق من وجود مراجعة للمستخدم على كتاب معين
