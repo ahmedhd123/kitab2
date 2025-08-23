@@ -1,0 +1,41 @@
+name: Dev Flutter Web CI/CD
+
+on:
+  push:
+    branches:
+      - development # تشغيل سير العمل عند الدفع لفرع development
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 'stable'
+
+      - name: Cache pub
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pub-cache
+          key: ${{ runner.os }}-pub-${{ hashFiles('pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-pub-
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Flutter web (release)
+        run: flutter build web --release
+
+      - name: Deploy to Firebase Hosting (Development)
+        uses: w9jds/firebase-action@master
+        with:
+          args: deploy --only hosting --channel development
+          project_id: kitab2 # استبدل بمعرف مشروعك إن اختلف
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
