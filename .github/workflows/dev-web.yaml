@@ -11,6 +11,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # required for some deploy steps that need full history
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -26,13 +28,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pub-
 
+      - name: Enable Flutter web
+        run: flutter config --enable-web
+
       - name: Install dependencies
         run: flutter pub get
 
       - name: Build Flutter web (release)
         run: flutter build web --release
 
-      - name: Deploy to Firebase Hosting (Development)
+  - name: Deploy to Firebase Hosting (Development)
         uses: w9jds/firebase-action@master
         with:
           args: deploy --only hosting --channel development
