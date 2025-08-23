@@ -38,9 +38,9 @@ jobs:
         run: flutter build web --release
 
       - name: Deploy to Firebase Hosting (Production)
-        uses: w9jds/firebase-action@master
-        with:
-          args: deploy --only hosting
-          project_id: kitab2 # استبدل بمعرف مشروعك إن اختلف
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        run: |
+          npm i -g firebase-tools
+          firebase --version
+          firebase deploy --only hosting --project kitab2 --non-interactive --message "${{ github.sha }}"
