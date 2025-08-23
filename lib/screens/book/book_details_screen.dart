@@ -15,7 +15,6 @@ import '../../widgets/safe_image.dart';
 import '../../utils/design_tokens.dart';
 import '../../firebase_options.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'dart:html' as html;
 
 // شاشة تفاصيل الكتاب (نسخة نظيفة بعد التنظيف)
 class BookDetailsScreen extends StatefulWidget {
@@ -253,19 +252,8 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
       ),
     );
 
-    // 1) تحقق من الاتصال بالمستخدم فقط (navigator.onLine) بدون أي طلبات خام قد تُسبب CORS
-    final online = html.window.navigator.onLine;
-    if (online != true) {
-      Navigator.of(context).pop();
-      await showDialog<void>(
-        context: context,
-        builder: (_) => const AlertDialog(
-          title: Text('تشخيص Firestore'),
-          content: Text('يبدو أنك غير متصل بالإنترنت (navigator.onLine = false).'),
-        ),
-      );
-      return;
-    }
+  // 1) فحص الاتصال بشكل محايد للمنصة: على الموبايل قد لا يتوفر navigator.onLine
+  // سنعتمد مباشرة على محاولة الوصول إلى Firestore مع مهلة زمنية بدل الاعتماد على dart:html
 
     // 2) اختبار قراءة عبر الـ SDK فقط (بدون googlePing / firestorePing) لتجنب الضجيج في الـ Console
     try {

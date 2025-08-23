@@ -7,6 +7,7 @@ import '../book/books_screen.dart';
 import '../book/book_details_screen.dart';
 import '../library/library_screen.dart';
 import 'upload_book_screen.dart';
+import '../profile/profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -22,7 +23,7 @@ class _HomeScreenState extends State<HomeScreen> {
     const HomePage(),
     const SearchPage(),
   const LibraryScreen(),
-    const ProfilePage(),
+  const ProfileScreen(),
   ];
 
   @override
@@ -61,132 +62,342 @@ class HomePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer2<AuthFirebaseService, BookService>(
       builder: (context, authService, bookService, child) {
-        final primary = Theme.of(context).colorScheme.primary;
+        final colorScheme = Theme.of(context).colorScheme;
+        final textTheme = Theme.of(context).textTheme;
+        
         return SafeArea(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Hero Header
+                // Modern Welcome Header
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(24),
                     gradient: LinearGradient(
-                      colors: [primary, primary.withOpacity(.75)],
+                      colors: [
+                        colorScheme.primary,
+                        colorScheme.primary.withOpacity(0.8),
+                        colorScheme.secondary.withOpacity(0.6),
+                      ],
                       begin: Alignment.topRight,
                       end: Alignment.bottomLeft,
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: primary.withOpacity(.25),
-                        blurRadius: 24,
-                        offset: const Offset(0, 10),
+                        color: colorScheme.primary.withOpacity(0.3),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
                       ),
                     ],
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'مرحباً، ${authService.currentUser?.email?.split('@')[0] ?? 'القارئ'}',
-                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: Colors.white),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text('ابدأ رحلتك المعرفية اليوم', style: TextStyle(fontSize: 15, color: Colors.white70)),
-                      const SizedBox(height: 16),
                       Row(
                         children: [
-                          Expanded(child: _miniStat('الكتب', bookService.books.length.toString(), Icons.menu_book)),
-                          const SizedBox(width: 10),
-                          Expanded(child: _miniStat('محفوظة', bookService.savedBooks.length.toString(), Icons.bookmark)),
-                          const SizedBox(width: 10),
-                          Expanded(child: _miniStat('قيد القراءة', bookService.getReadingBooks(authService.currentUser?.uid ?? '').length.toString(), Icons.timelapse)),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'أهلاً وسهلاً 👋',
+                                  style: textTheme.titleMedium?.copyWith(
+                                    color: Colors.white.withOpacity(0.9),
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  authService.currentUser?.email?.split('@')[0] ?? 'القارئ',
+                                  style: textTheme.headlineSmall?.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'استمتع برحلتك في عالم المعرفة والكتب',
+                                  style: textTheme.bodyMedium?.copyWith(
+                                    color: Colors.white.withOpacity(0.85),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            width: 60,
+                            height: 60,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: Colors.white.withOpacity(0.3),
+                                width: 1,
+                              ),
+                            ),
+                            child: const Icon(
+                              Icons.auto_stories_rounded,
+                              color: Colors.white,
+                              size: 28,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      Row(
+                        children: [
+                          Expanded(child: _modernStat('المجموعة', bookService.books.length.toString(), Icons.library_books_rounded, Colors.white.withOpacity(0.2))),
+                          const SizedBox(width: 12),
+                          Expanded(child: _modernStat('المحفوظات', bookService.savedBooks.length.toString(), Icons.bookmark_rounded, Colors.white.withOpacity(0.2))),
+                          const SizedBox(width: 12),
+                          Expanded(child: _modernStat('الحالية', bookService.getReadingBooks(authService.currentUser?.uid ?? '').length.toString(), Icons.schedule_rounded, Colors.white.withOpacity(0.2))),
                         ],
                       )
                     ],
                   ),
                 ),
-                const SizedBox(height: 28),
+                const SizedBox(height: 32),
 
-                // Quick Actions
+                // Quick Action Cards with Modern Design
                 Row(
                   children: [
                     Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BooksScreen())),
-                        icon: const Icon(Icons.library_books),
-                        label: const Text('تصفح الكتب'),
-                        style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UploadBookScreen())),
-                          icon: const Icon(Icons.upload_file),
-                          label: const Text('رفع كتاب'),
-                          style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          gradient: LinearGradient(
+                            colors: [
+                              colorScheme.primary.withOpacity(0.1),
+                              colorScheme.primary.withOpacity(0.05),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          border: Border.all(
+                            color: colorScheme.primary.withOpacity(0.2),
+                            width: 1,
+                          ),
+                        ),
+                        child: Material(
+                          color: Colors.transparent,
+                          borderRadius: BorderRadius.circular(16),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(16),
+                            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BooksScreen())),
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                children: [
+                                  Container(
+                                    width: 48,
+                                    height: 48,
+                                    decoration: BoxDecoration(
+                                      color: colorScheme.primary,
+                                      borderRadius: BorderRadius.circular(12),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: colorScheme.primary.withOpacity(0.3),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 4),
+                                        ),
+                                      ],
+                                    ),
+                                    child: const Icon(
+                                      Icons.library_books_rounded,
+                                      color: Colors.white,
+                                      size: 24,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'تصفح الكتب',
+                                    style: textTheme.titleSmall?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: colorScheme.primary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                         ),
                       ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          gradient: LinearGradient(
+                            colors: [
+                              colorScheme.secondary.withOpacity(0.1),
+                              colorScheme.secondary.withOpacity(0.05),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          border: Border.all(
+                            color: colorScheme.secondary.withOpacity(0.2),
+                            width: 1,
+                          ),
+                        ),
+                        child: Material(
+                          color: Colors.transparent,
+                          borderRadius: BorderRadius.circular(16),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(16),
+                            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UploadBookScreen())),
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                children: [
+                                  Container(
+                                    width: 48,
+                                    height: 48,
+                                    decoration: BoxDecoration(
+                                      color: colorScheme.secondary,
+                                      borderRadius: BorderRadius.circular(12),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: colorScheme.secondary.withOpacity(0.3),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 4),
+                                        ),
+                                      ],
+                                    ),
+                                    child: const Icon(
+                                      Icons.upload_file_rounded,
+                                      color: Colors.white,
+                                      size: 24,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'رفع كتاب',
+                                    style: textTheme.titleSmall?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: colorScheme.secondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 28),
+                const SizedBox(height: 32),
 
-                _sectionHeader(context, 'الكتب المميزة', onViewAll: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BooksScreen()))),
+                _modernSectionHeader(context, 'الكتب المميزة ⭐', onViewAll: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BooksScreen()))),
+                const SizedBox(height: 16),
                 SizedBox(
-                  height: 210,
+                  height: 240,
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
                     itemCount: bookService.featuredBooks.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 14),
+                    separatorBuilder: (_, __) => const SizedBox(width: 16),
                     itemBuilder: (c, i) {
                       final b = bookService.featuredBooks[i];
                       return SizedBox(
-                        width: 150,
-                        child: Card(
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                          elevation: 0,
-                          color: Theme.of(context).cardColor,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(18),
-                            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => BookDetailsScreen(book: b))),
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        borderRadius: BorderRadius.circular(14),
-                                        gradient: LinearGradient(
-                                          colors: [
-                                            Theme.of(context).colorScheme.primary.withOpacity(.85),
-                                            Theme.of(context).colorScheme.primary.withOpacity(.55),
+                        width: 160,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(20),
+                            color: Theme.of(context).cardColor,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.08),
+                                blurRadius: 16,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            borderRadius: BorderRadius.circular(20),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(20),
+                              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => BookDetailsScreen(book: b))),
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(16),
+                                          gradient: LinearGradient(
+                                            colors: [
+                                              colorScheme.primary.withOpacity(0.8),
+                                              colorScheme.primary.withOpacity(0.6),
+                                              colorScheme.secondary.withOpacity(0.4),
+                                            ],
+                                            begin: Alignment.topRight,
+                                            end: Alignment.bottomLeft,
+                                          ),
+                                        ),
+                                        child: Stack(
+                                          children: [
+                                            const Center(
+                                              child: Icon(Icons.auto_stories_rounded, color: Colors.white, size: 48),
+                                            ),
+                                            Positioned(
+                                              top: 8,
+                                              left: 8,
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.white.withOpacity(0.9),
+                                                  borderRadius: BorderRadius.circular(8),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    const Icon(Icons.star, size: 12, color: Colors.amber),
+                                                    const SizedBox(width: 2),
+                                                    Text(
+                                                      b.averageRating.toStringAsFixed(1),
+                                                      style: textTheme.labelSmall?.copyWith(
+                                                        fontWeight: FontWeight.w600,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
                                           ],
-                                          begin: Alignment.topRight,
-                                          end: Alignment.bottomLeft,
                                         ),
                                       ),
-                                      child: const Center(
-                                        child: Icon(Icons.menu_book_rounded, color: Colors.white, size: 44),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      b.title,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: textTheme.titleSmall?.copyWith(
+                                        fontWeight: FontWeight.w600,
+                                        height: 1.2,
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 10),
-                                  Text(b.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700, height: 1.2)),
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.star, size: 14, color: Colors.amber),
-                                      const SizedBox(width: 4),
-                                      Text(b.averageRating.toStringAsFixed(1), style: Theme.of(context).textTheme.labelSmall),
-                                    ],
-                                  )
-                                ],
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      b.author,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: textTheme.bodySmall?.copyWith(
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
@@ -195,11 +406,13 @@ class HomePage extends StatelessWidget {
                     },
                   ),
                 ),
-                const SizedBox(height: 28),
+                const SizedBox(height: 32),
 
-                _sectionHeader(context, 'الأكثر تحميلاً', onViewAll: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BooksScreen()))),
-                const SizedBox(height: 12),
-                ...bookService.getMostDownloadedBooks(limit: 3).map((b) => _downloadedTile(context, b)),
+                _modernSectionHeader(context, 'الأكثر شعبية 🔥', onViewAll: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BooksScreen()))),
+                const SizedBox(height: 16),
+                Column(
+                  children: bookService.getMostDownloadedBooks(limit: 3).map((b) => _modernBookTile(context, b, colorScheme, textTheme)).toList(),
+                ),
               ],
             ),
           ),
@@ -208,68 +421,183 @@ class HomePage extends StatelessWidget {
     );
   }
 
-  static Widget _miniStat(String title, String value, IconData icon) {
+  // Modern UI Helper Widgets
+  static Widget _modernStat(String title, String value, IconData icon, Color backgroundColor) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(.15),
-        borderRadius: BorderRadius.circular(14),
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.2),
+          width: 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(icon, size: 20, color: Colors.white),
-          const SizedBox(height: 6),
-          Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16)),
-          Text(title, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              fontSize: 18,
+            ),
+          ),
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  static Widget _sectionHeader(BuildContext context, String title, {VoidCallback? onViewAll}) {
+  static Widget _modernSectionHeader(BuildContext context, String title, {VoidCallback? onViewAll}) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text(title, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
-        if (onViewAll != null) TextButton(onPressed: onViewAll, child: const Text('عرض الكل')),
+        Text(
+          title,
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w700,
+            fontSize: 20,
+          ),
+        ),
+        if (onViewAll != null)
+          TextButton.icon(
+            onPressed: onViewAll,
+            icon: const Icon(Icons.arrow_forward_ios, size: 16),
+            label: const Text('عرض الكل'),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            ),
+          ),
       ],
     );
   }
 
-  static Widget _downloadedTile(BuildContext context, book) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: ListTile(
-        leading: Container(
-          width: 48,
-          height: 60,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            gradient: LinearGradient(
-              colors: [
-                Theme.of(context).colorScheme.primary.withOpacity(.75),
-                Theme.of(context).colorScheme.primary.withOpacity(.45),
+  static Widget _modernBookTile(BuildContext context, book, ColorScheme colorScheme, TextTheme textTheme) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        color: Theme.of(context).cardColor,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => BookDetailsScreen(book: book))),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  width: 56,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    gradient: LinearGradient(
+                      colors: [
+                        colorScheme.primary.withOpacity(0.8),
+                        colorScheme.primary.withOpacity(0.6),
+                      ],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                  ),
+                  child: const Icon(Icons.auto_stories_rounded, color: Colors.white, size: 28),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        book.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          height: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        book.author,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: textTheme.bodySmall?.copyWith(
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: colorScheme.primary.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.download_rounded, size: 12, color: colorScheme.primary),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${book.downloadCount}',
+                                  style: textTheme.labelSmall?.copyWith(
+                                    color: colorScheme.primary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Row(
+                            children: [
+                              const Icon(Icons.star_rounded, size: 16, color: Colors.amber),
+                              const SizedBox(width: 4),
+                              Text(
+                                book.averageRating.toStringAsFixed(1),
+                                style: textTheme.labelSmall?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  size: 16,
+                  color: Colors.grey[400],
+                ),
               ],
-              begin: Alignment.topRight,
-              end: Alignment.bottomLeft,
             ),
           ),
-          child: const Icon(Icons.menu_book, color: Colors.white),
         ),
-        title: Text(book.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Row(
-          children: [
-            const Icon(Icons.download_rounded, size: 14, color: Colors.grey),
-            const SizedBox(width: 4),
-            Text('${book.downloadCount}', style: const TextStyle(fontSize: 12)),
-            const SizedBox(width: 12),
-            const Icon(Icons.star, size: 14, color: Colors.amber),
-            const SizedBox(width: 4),
-            Text(book.averageRating.toStringAsFixed(1), style: const TextStyle(fontSize: 12)),
-          ],
-        ),
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => BookDetailsScreen(book: book))),
       ),
     );
   }
@@ -290,229 +618,382 @@ class _SearchPageState extends State<SearchPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('البحث'),
-        backgroundColor: Theme.of(context).primaryColor,
-        foregroundColor: Colors.white,
-      ),
-      body: Column(
-        children: [
-          // شريط البحث
-          Container(
-            padding: const EdgeInsets.all(16),
-            color: Colors.grey[50],
-            child: Column(
-              children: [
-                TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'ابحث عن كتاب أو مؤلف...',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() {
-                                _searchQuery = '';
-                              });
-                            },
-                          )
-                        : null,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(25),
-                      borderSide: BorderSide.none,
-                    ),
-                    filled: true,
-                    fillColor: Colors.white,
-                  ),
-                  onChanged: (value) {
-                    setState(() {
-                      _searchQuery = value;
-                    });
-                  },
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Modern Search Header
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Theme.of(context).cardColor,
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(24),
+                  bottomRight: Radius.circular(24),
                 ),
-                const SizedBox(height: 12),
-                // فلاتر الفئات
-                SizedBox(
-                  height: 40,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: BookService.categories.length,
-                    itemBuilder: (context, index) {
-                      final category = BookService.categories[index];
-                      final isSelected = category == _selectedCategory;
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8.0),
-                        child: FilterChip(
-                          label: Text(category),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 12,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'اكتشف كتابك المثالي 📚',
+                    style: textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Modern Search Bar
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      gradient: LinearGradient(
+                        colors: [
+                          colorScheme.primary.withOpacity(0.08),
+                          colorScheme.primary.withOpacity(0.04),
+                        ],
+                      ),
+                      border: Border.all(
+                        color: colorScheme.primary.withOpacity(0.2),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        hintText: 'ابحث عن كتاب، مؤلف، أو موضوع...',
+                        hintStyle: TextStyle(
+                          color: Colors.grey[500],
+                          fontSize: 14,
+                        ),
+                        prefixIcon: Icon(
+                          Icons.search_rounded,
+                          color: colorScheme.primary,
+                          size: 22,
+                        ),
+                        suffixIcon: _searchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: Icon(
+                                  Icons.clear_rounded,
+                                  color: Colors.grey[400],
+                                ),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() {
+                                    _searchQuery = '';
+                                  });
+                                },
+                              )
+                            : null,
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 16,
+                        ),
+                      ),
+                      onChanged: (value) {
+                        setState(() {
+                          _searchQuery = value;
+                        });
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Modern Category Filters
+                  SizedBox(
+                    height: 42,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: BookService.categories.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (context, index) {
+                        final category = BookService.categories[index];
+                        final isSelected = category == _selectedCategory;
+                        return FilterChip(
+                          label: Text(
+                            category,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                              color: isSelected ? Colors.white : colorScheme.primary,
+                            ),
+                          ),
                           selected: isSelected,
                           onSelected: (selected) {
                             setState(() {
                               _selectedCategory = category;
                             });
                           },
-                          selectedColor: Theme.of(context).primaryColor.withOpacity(0.2),
-                          checkmarkColor: Theme.of(context).primaryColor,
-                        ),
-                      );
-                    },
+                          backgroundColor: colorScheme.primary.withOpacity(0.1),
+                          selectedColor: colorScheme.primary,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            side: BorderSide(
+                              color: isSelected ? colorScheme.primary : colorScheme.primary.withOpacity(0.3),
+                              width: 1.5,
+                            ),
+                          ),
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        );
+                      },
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
+            ),
+              // نتائج البحث
+            Expanded(
+              child: Consumer<BookService>(
+                builder: (context, bookService, child) {
+                  final books = bookService.searchBooks(_searchQuery, category: _selectedCategory);
+                  
+                  if (_searchQuery.isEmpty && _selectedCategory == 'الكل') {
+                    return _buildEmptySearchState();
+                  }
+
+                  if (books.isEmpty) {
+                    return _buildNoResultsState();
+                  }
+
+                  return ListView.separated(
+                    padding: const EdgeInsets.all(20),
+                    itemCount: books.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      final book = books[index];
+                      return _buildModernSearchTile(context, book, colorScheme, textTheme);
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptySearchState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 120,
+            height: 120,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(60),
+            ),
+            child: Icon(
+              Icons.search_rounded,
+              size: 60,
+              color: Theme.of(context).colorScheme.primary.withOpacity(0.6),
             ),
           ),
-          // نتائج البحث
-          Expanded(
-            child: Consumer<BookService>(
-              builder: (context, bookService, child) {
-                final books = bookService.searchBooks(_searchQuery, category: _selectedCategory);
-                
-                if (_searchQuery.isEmpty && _selectedCategory == 'الكل') {
-                  return const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.search,
-                          size: 100,
-                          color: Colors.grey,
-                        ),
-                        SizedBox(height: 20),
-                        Text(
-                          'ابحث عن الكتب والمؤلفين',
-                          style: TextStyle(
-                            fontSize: 18,
-                            color: Colors.grey,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                if (books.isEmpty) {
-                  return const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.search_off,
-                          size: 100,
-                          color: Colors.grey,
-                        ),
-                        SizedBox(height: 20),
-                        Text(
-                          'لا توجد نتائج للبحث',
-                          style: TextStyle(
-                            fontSize: 18,
-                            color: Colors.grey,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                return ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: books.length,
-                  itemBuilder: (context, index) {
-                    final book = books[index];
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      child: ListTile(
-                        leading: Container(
-                          width: 50,
-                          height: 70,
-                          decoration: BoxDecoration(
-                            color: _getBookColor(book.category).withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Icon(
-                            Icons.menu_book,
-                            color: _getBookColor(book.category),
-                          ),
-                        ),
-                        title: Text(
-                          book.title,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(book.author),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: _getBookColor(book.category).withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    book.category,
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: _getBookColor(book.category),
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                const Icon(
-                                  Icons.star,
-                                  size: 14,
-                                  color: Colors.amber,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  book.averageRating.toStringAsFixed(1),
-                                  style: const TextStyle(fontSize: 12),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        trailing: Icon(
-                          Icons.arrow_forward_ios,
-                          size: 16,
-                          color: Colors.grey[400],
-                        ),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => BookDetailsScreen(book: book),
-                            ),
-                          );
-                        },
-                      ),
-                    );
-                  },
-                );
-              },
+          const SizedBox(height: 24),
+          Text(
+            'ابحث في مكتبة الكتب',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w600,
             ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'اكتشف آلاف الكتب في جميع المجالات',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Colors.grey[600],
+            ),
+            textAlign: TextAlign.center,
           ),
         ],
       ),
     );
   }
 
-  Color _getBookColor(String category) {
+  Widget _buildNoResultsState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 120,
+            height: 120,
+            decoration: BoxDecoration(
+              color: Colors.grey.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(60),
+            ),
+            child: Icon(
+              Icons.search_off_rounded,
+              size: 60,
+              color: Colors.grey[400],
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'لم نجد ما تبحث عنه',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: Colors.grey[700],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'جرب البحث بكلمات مختلفة أو تصفح الفئات',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Colors.grey[500],
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModernSearchTile(BuildContext context, book, ColorScheme colorScheme, TextTheme textTheme) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        color: Theme.of(context).cardColor,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => BookDetailsScreen(book: book),
+              ),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  width: 56,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: _getModernBookColor(book.category).withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _getModernBookColor(book.category).withOpacity(0.3),
+                      width: 1,
+                    ),
+                  ),
+                  child: Icon(
+                    Icons.auto_stories_rounded,
+                    color: _getModernBookColor(book.category),
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        book.title,
+                        style: textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          height: 1.2,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        book.author,
+                        style: textTheme.bodyMedium?.copyWith(
+                          color: Colors.grey[600],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: _getModernBookColor(book.category).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              book.category,
+                              style: textTheme.labelSmall?.copyWith(
+                                color: _getModernBookColor(book.category),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.star_rounded,
+                                size: 16,
+                                color: Colors.amber,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                book.averageRating.toStringAsFixed(1),
+                                style: textTheme.labelMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 16,
+                  color: Colors.grey[400],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color _getModernBookColor(String category) {
     const colors = {
-      'الأدب': Colors.orange,
-      'العلوم': Colors.blue,
-      'التاريخ': Colors.purple,
-      'الفلسفة': Colors.red,
-      'التكنولوجيا': Colors.teal,
-      'الدين': Colors.green,
-      'الطبخ': Colors.brown,
-      'الرياضة': Colors.indigo,
+      'الأدب': Color(0xFFE57C2F),
+      'العلوم': Color(0xFF2F7DE5),
+      'التاريخ': Color(0xFF8C54D9),
+      'الفلسفة': Color(0xFFDB5068),
+      'التكنولوجيا': Color(0xFF159D86),
+      'الدين': Color(0xFF2E8B57),
+      'الطبخ': Color(0xFFB26B35),
+      'الرياضة': Color(0xFF5468FF),
     };
-    return colors[category] ?? Colors.grey;
+    return colors[category] ?? const Color(0xFF6B7280);
   }
 }
 

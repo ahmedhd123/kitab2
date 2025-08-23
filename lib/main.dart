@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
@@ -20,7 +21,13 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // تهيئة Firebase (Placeholders حالياً حتى يتم استبدال القيم عبر flutterfire configure)
   try {
-    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    // على أندرويد، سنعتمد على الضبط الأصلي من google-services.json
+    // وعلى المنصات الأخرى نستخدم DefaultFirebaseOptions
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      await Firebase.initializeApp();
+    } else {
+      await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    }
     // On web, IndexedDB/persistence can be unavailable (incognito, restricted envs).
     // Disable persistence to avoid the "client is offline" errors when IndexedDB isn't usable.
     if (kIsWeb) {
@@ -80,7 +87,15 @@ class MyApp extends StatelessWidget {
               builder: (context) {
                 final auth = Provider.of<AuthFirebaseService>(context, listen: false);
                 return StreamBuilder(
-                  stream: auth.authStateChanges,
+                  // تجنّب الانتظار اللانهائي في حال تعذّر تهيئة Firebase أو انقطاع الشبكة
+                  // بعد 5 ثوانٍ سنعتبر أن المستخدم غير مسجّل دخول ونعرض شاشة تسجيل الدخول
+                  stream: auth.authStateChanges.timeout(
+                    const Duration(seconds: 5),
+                    onTimeout: (sink) {
+                      // ادفع قيمة null لتوجيه المستخدم لشاشة تسجيل الدخول
+                      sink.add(null);
+                    },
+                  ),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const SplashScreen();

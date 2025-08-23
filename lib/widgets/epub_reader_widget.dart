@@ -162,7 +162,7 @@ class _EpubReaderWidgetState extends State<EpubReaderWidget> {
     final blocks = <_Paragraph>[];
     
     // استخراج وحفظ الصور أولاً
-    final imageRegex = RegExp(r'<img[^>]+src=["\' "'" + r']([^"\' + "'" + r']+)["\' + "'" + r'][^>]*>', caseSensitive: false);
+    final imageRegex = RegExp(r'<img[^>]+src=["\' "'" r']([^"\' "'" r']+)["\' + "'" + r'][^>]*>', caseSensitive: false);
     final imageMatches = imageRegex.allMatches(html);
     final images = <String>[];
     for (final match in imageMatches) {

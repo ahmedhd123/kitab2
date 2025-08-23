@@ -1,7 +1,9 @@
+import 'dart:typed_data';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart'; // لـ ChangeNotifier
 // (debugPrint replaced with print for simplicity)
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../firebase_options.dart';
 
 /// خدمة مصادقة Firebase حقيقية (بديلة لـ SimpleAuthService)
@@ -92,6 +94,59 @@ class AuthFirebaseService extends ChangeNotifier {
   Future<void> signOut() async {
     await _auth.signOut();
     notifyListeners();
+  }
+
+  /// تحديث بيانات الملف الشخصي (الاسم والنبذة)
+  Future<String?> updateProfile({String? displayName, String? bio}) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return 'لا يوجد مستخدم مسجّل';
+
+      if (displayName != null && displayName.trim().isNotEmpty && displayName != user.displayName) {
+        await user.updateDisplayName(displayName.trim());
+      }
+
+      final data = <String, dynamic>{
+        if (displayName != null && displayName.trim().isNotEmpty) 'displayName': displayName.trim(),
+        if (bio != null) 'bio': bio,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+      if (data.isNotEmpty) {
+        await _db.collection('users').doc(user.uid).set(data, SetOptions(merge: true));
+      }
+      notifyListeners();
+      return null;
+    } catch (e) {
+      return 'تعذر تحديث الملف: $e';
+    }
+  }
+
+  /// رفع صورة شخصية وتحديث photoURL في الحساب و Firestore
+  Future<String?> uploadAvatarBytes(Uint8List bytes, {String contentType = 'image/jpeg'}) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return 'لا يوجد مستخدم مسجّل';
+      final ext = contentType.contains('png') ? 'png' : 'jpg';
+      final ref = FirebaseStorage.instance.ref().child('users/${user.uid}/avatar.$ext');
+      await ref.putData(bytes, SettableMetadata(contentType: contentType));
+      final url = await ref.getDownloadURL();
+      await user.updatePhotoURL(url);
+      await _db.collection('users').doc(user.uid).set({'photoURL': url, 'updatedAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
+      notifyListeners();
+      return null;
+    } catch (e) {
+      return 'تعذر رفع الصورة: $e';
+    }
+  }
+
+  /// إرسال رسالة تحقق للبريد الإلكتروني
+  Future<void> sendEmailVerification() async {
+    try {
+      final user = _auth.currentUser;
+      if (user != null && !user.emailVerified) {
+        await user.sendEmailVerification();
+      }
+    } catch (_) {}
   }
 
   String _mapError(String code) {
