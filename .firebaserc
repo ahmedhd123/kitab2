@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "kitab2"
-  }
+    "default": "kitab2",
+    "staging": "kitab2"
+  },
+  "targets": {},
+  "etags": {}
 }
