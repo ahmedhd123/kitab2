@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'design_tokens.dart';
+import 'enhanced_design_tokens.dart';
 
 class AppTheme {
-  // ألوان رئيسية حديثة (لوحة محايدة + أخضر معرف للهوية)
-  static const Color primaryColor = AppColors.primary;
-  static const Color neutralBackground = AppColors.neutral50;
-  static const Color darkNeutral = AppColors.neutral900;
-  static const Color accentColor = AppColors.secondary;
-  static const Color warningColor = AppColors.warning;
-  static const Color dangerColor = AppColors.danger;
+  // ألوان رئيسية حديثة محسّنة
+  static const Color primaryColor = EnhancedAppColors.primary;
+  static const Color neutralBackground = EnhancedAppColors.surface;
+  static const Color darkNeutral = EnhancedAppColors.gray900;
+  static const Color accentColor = EnhancedAppColors.secondary;
+  static const Color warningColor = EnhancedAppColors.warning;
+  static const Color dangerColor = EnhancedAppColors.error;
   
   static ThemeData get lightTheme {
     final base = ThemeData(
@@ -17,45 +18,69 @@ class AppTheme {
       colorScheme: ColorScheme.fromSeed(
         seedColor: primaryColor,
         brightness: Brightness.light,
+        primary: EnhancedAppColors.primary,
+        primaryContainer: EnhancedAppColors.primaryContainer,
+        secondary: EnhancedAppColors.secondary,
+        secondaryContainer: EnhancedAppColors.secondaryContainer,
+        surface: EnhancedAppColors.surface,
+        background: EnhancedAppColors.background,
+        error: EnhancedAppColors.error,
       ),
     );
 
     return base.copyWith(
-      scaffoldBackgroundColor: neutralBackground,
-  cardTheme: CardThemeData(
+      scaffoldBackgroundColor: EnhancedAppColors.surface,
+      cardTheme: CardThemeData(
         elevation: 0,
-  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
-  color: AppColors.neutral0,
-  surfaceTintColor: AppColors.neutral0,
-  shadowColor: Colors.transparent,
-  margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(EnhancedRadius.lg)),
+        color: Colors.white,
+        surfaceTintColor: Colors.white,
+        shadowColor: Colors.transparent,
+        margin: EdgeInsets.zero,
       ),
       appBarTheme: AppBarTheme(
         elevation: 0,
         scrolledUnderElevation: 0,
         backgroundColor: Colors.transparent,
-        foregroundColor: darkNeutral,
+        foregroundColor: EnhancedAppColors.gray800,
         centerTitle: true,
         titleTextStyle: base.textTheme.titleLarge?.copyWith(
-          fontWeight: FontWeight.w700,
-          color: darkNeutral,
-          fontSize: 20,
-          letterSpacing: .2,
+          fontWeight: EnhancedTypography.bold,
+          color: EnhancedAppColors.gray800,
+          fontSize: EnhancedTypography.headlineSmall,
+          letterSpacing: 0.2,
         ),
-        toolbarHeight: 60,
+        toolbarHeight: 64,
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ButtonStyle(
-          textStyle: WidgetStateProperty.all(const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-          padding: WidgetStateProperty.all(const EdgeInsets.symmetric(horizontal: 28, vertical: 14)),
-          shape: WidgetStateProperty.all(RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+          textStyle: WidgetStateProperty.all(
+            const TextStyle(
+              fontWeight: EnhancedTypography.semiBold, 
+              fontSize: EnhancedTypography.bodyMedium,
+            ),
+          ),
+          padding: WidgetStateProperty.all(
+            const EdgeInsets.symmetric(
+              horizontal: EnhancedSpacing.xl, 
+              vertical: EnhancedSpacing.lg,
+            ),
+          ),
+          shape: WidgetStateProperty.all(
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(EnhancedRadius.md),
+            ),
+          ),
           elevation: WidgetStateProperty.all(0),
           backgroundColor: WidgetStateProperty.resolveWith((states) {
-            if (states.contains(WidgetState.disabled)) return base.colorScheme.onSurface.withOpacity(.12);
-            return base.colorScheme.primary;
+            if (states.contains(WidgetState.disabled)) {
+              return EnhancedAppColors.gray300;
+            }
+            return EnhancedAppColors.primary;
           }),
-          foregroundColor: WidgetStateProperty.all(base.colorScheme.onPrimary),
-          overlayColor: WidgetStateProperty.resolveWith((states) => base.colorScheme.primary.withOpacity(.08)),
+          foregroundColor: WidgetStateProperty.all(Colors.white),
+          overlayColor: WidgetStateProperty.resolveWith((states) => 
+              EnhancedAppColors.primary.withOpacity(.08)),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(

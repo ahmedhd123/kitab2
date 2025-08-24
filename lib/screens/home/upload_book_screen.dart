@@ -242,7 +242,7 @@ class _UploadBookScreenState extends State<UploadBookScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: DropdownButtonFormField<String>(
-                    initialValue: _category,
+                    value: _category,
                     isExpanded: true,
                     items: BookService.categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
                     onChanged: (v) => setState(() => _category = v ?? 'الكل'),

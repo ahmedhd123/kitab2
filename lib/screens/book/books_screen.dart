@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../services/book_service.dart';
 import '../../models/book_model.dart';
 import '../../widgets/book_card.dart';
+import '../../widgets/mobile_book_card.dart';
 
 class BooksScreen extends StatefulWidget {
   const BooksScreen({super.key});
@@ -38,186 +39,31 @@ class _BooksScreenState extends State<BooksScreen> with TickerProviderStateMixin
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: NestedScrollView(
-        headerSliverBuilder: (context, innerBoxIsScrolled) {
-          return [
-            // شريط التطبيق المرن
-            SliverAppBar(
-              expandedHeight: 200,
-              floating: false,
-              pinned: true,
-              flexibleSpace: FlexibleSpaceBar(
-                title: const Text(
-                  'مكتبة الكتب',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                background: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Theme.of(context).primaryColor,
-                        Theme.of(context).primaryColor.withOpacity(0.8),
-                      ],
-                    ),
-                  ),
-                  child: Stack(
-                    children: [
-                      Positioned(
-                        right: 20,
-                        top: 60,
-                        child: Icon(
-                          Icons.library_books,
-                          size: 100,
-                          color: Colors.white.withOpacity(0.2),
-                        ),
-                      ),
-                      Positioned(
-                        left: 20,
-                        bottom: 60,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Consumer<BookService>(
-                              builder: (context, bookService, child) {
-                                return Text(
-                                  '${bookService.books.length} كتاب متاح',
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                );
-                              },
-                            ),
-                            const Text(
-                              'اكتشف عالماً من المعرفة',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.white70,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              bottom: TabBar(
-                controller: _tabController,
-                indicatorColor: Colors.white,
-                labelColor: Colors.white,
-                unselectedLabelColor: Colors.white70,
-                tabs: const [
-                  Tab(text: 'الكل'),
-                  Tab(text: 'المميزة'),
-                  Tab(text: 'الأعلى تقييماً'),
-                  Tab(text: 'الأكثر تحميلاً'),
-                ],
-              ),
-            ),
-
-            // شريط البحث والفلترة
-            SliverToBoxAdapter(
-              child: Container(
-                color: Colors.white,
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    // شريط البحث
-                    TextField(
-                      controller: _searchController,
-                      decoration: InputDecoration(
-                        hintText: 'ابحث عن كتاب أو مؤلف...',
-                        prefixIcon: const Icon(Icons.search),
-                        suffixIcon: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (_searchController.text.isNotEmpty)
-                              IconButton(
-                                icon: const Icon(Icons.clear),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  setState(() {
-                                    _searchQuery = '';
-                                  });
-                                },
-                              ),
-                            IconButton(
-                              icon: const Icon(Icons.tune),
-                              onPressed: _showFilterDialog,
-                            ),
-                          ],
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(25),
-                          borderSide: BorderSide.none,
-                        ),
-                        filled: true,
-                        fillColor: Colors.grey[100],
-                      ),
-                      onChanged: (value) {
-                        setState(() {
-                          _searchQuery = value;
-                          // update results locally after server fetch
-                          _applyFilters();
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 12),
-
-                    // فلاتر الفئات
-                    SizedBox(
-                      height: 40,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: BookService.categories.length,
-                        itemBuilder: (context, index) {
-                          final category = BookService.categories[index];
-                          final isSelected = category == _selectedCategory;
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 8.0),
-                            child: FilterChip(
-                              label: Text(category),
-                              selected: isSelected,
-                              onSelected: (selected) {
-                                setState(() {
-                                  _selectedCategory = category;
-                                  _applyFilters();
-                                });
-                              },
-                              selectedColor: Theme.of(context).primaryColor.withOpacity(0.2),
-                              checkmarkColor: Theme.of(context).primaryColor,
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ];
-        },
-        body: TabBarView(
+      appBar: AppBar(
+        title: const Text('مكتبة الكتب'),
+        backgroundColor: Theme.of(context).primaryColor,
+        foregroundColor: Colors.white,
+        bottom: TabBar(
           controller: _tabController,
-          children: [
-            _buildAllBooksTab(),
-            _buildFeaturedBooksTab(),
-            _buildTopRatedBooksTab(),
-            _buildMostDownloadedBooksTab(),
+          indicatorColor: Colors.white,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
+          tabs: const [
+            Tab(text: 'الكل'),
+            Tab(text: 'الشائعة'),
+            Tab(text: 'الجديدة'),
+            Tab(text: 'البحث المتقدم'),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddBookDialog,
-        tooltip: 'إضافة كتاب جديد',
-        child: const Icon(Icons.add),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildAllBooksTab(),
+          _buildPopularBooksTab(),
+          _buildNewBooksTab(),
+          _buildAdvancedSearchTab(),
+        ],
       ),
     );
   }
@@ -225,74 +71,255 @@ class _BooksScreenState extends State<BooksScreen> with TickerProviderStateMixin
   Widget _buildAllBooksTab() {
     return Consumer<BookService>(
       builder: (context, bookService, child) {
-        // Use server-side advanced results when available
-        final source = _advancedResults ?? bookService.searchBooks(_searchQuery, category: _selectedCategory);
-
-        // apply local title/author search
-        final filtered = source.where((b) {
-          final matchesQuery = _searchQuery.isEmpty || b.title.toLowerCase().contains(_searchQuery.toLowerCase()) || b.author.toLowerCase().contains(_searchQuery.toLowerCase());
-          return matchesQuery;
-        }).toList();
-
-        final sortedBooks = _sortBooks(filtered);
-
-        if (_isLoading) return const Center(child: CircularProgressIndicator());
-
-        if (sortedBooks.isEmpty) {
-          return _buildEmptyState('لا توجد كتب تطابق البحث', Icons.search_off);
+        final books = bookService.books;
+        
+        if (books.isEmpty) {
+          return _buildEmptyState('لا توجد كتب متاحة', Icons.library_books);
         }
 
-        return _buildBooksGrid(sortedBooks);
-      },
-    );
-  }
-
-  Widget _buildFeaturedBooksTab() {
-    return Consumer<BookService>(
-      builder: (context, bookService, child) {
-        final books = bookService.featuredBooks;
         return _buildBooksGrid(books);
       },
     );
   }
 
-  Widget _buildTopRatedBooksTab() {
+  Widget _buildPopularBooksTab() {
     return Consumer<BookService>(
       builder: (context, bookService, child) {
-        final books = bookService.getTopRatedBooks();
+        final books = bookService.books
+            .where((book) => book.averageRating >= 4.0)
+            .toList()
+          ..sort((a, b) => b.averageRating.compareTo(a.averageRating));
+        
+        if (books.isEmpty) {
+          return _buildEmptyState('لا توجد كتب شائعة', Icons.trending_up);
+        }
+
         return _buildBooksGrid(books);
       },
     );
   }
 
-  Widget _buildMostDownloadedBooksTab() {
+  Widget _buildNewBooksTab() {
     return Consumer<BookService>(
       builder: (context, bookService, child) {
-        final books = bookService.getMostDownloadedBooks();
-        return _buildBooksGrid(books);
+        final books = bookService.books.toList()
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        
+        if (books.isEmpty) {
+          return _buildEmptyState('لا توجد كتب جديدة', Icons.new_releases);
+        }
+
+        return _buildBooksGrid(books.take(20).toList());
       },
     );
   }
 
-  Widget _buildBooksGrid(List<BookModel> books) {
+  Widget _buildAdvancedSearchTab() {
     return Padding(
       padding: const EdgeInsets.all(16.0),
-      child: GridView.builder(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-          childAspectRatio: 0.7,
-        ),
-        itemCount: books.length,
-        itemBuilder: (context, index) {
-          return _buildBookCard(books[index]);
-        },
+      child: Column(
+        children: [
+          // شريط البحث
+          TextField(
+            controller: _searchController,
+            decoration: const InputDecoration(
+              hintText: 'ابحث عن كتاب أو مؤلف...',
+              prefixIcon: Icon(Icons.search),
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (value) {
+              setState(() {
+                _searchQuery = value;
+              });
+            },
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // خيارات التصفية
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: _selectedCategory,
+                  decoration: const InputDecoration(
+                    labelText: 'الفئة',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: ['الكل', ...BookService.categories].map((category) {
+                    return DropdownMenuItem(
+                      value: category,
+                      child: Text(category),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedCategory = value ?? 'الكل';
+                    });
+                  },
+                ),
+              ),
+              
+              const SizedBox(width: 16),
+              
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: _sortBy,
+                  decoration: const InputDecoration(
+                    labelText: 'الترتيب',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'الأحدث', child: Text('الأحدث')),
+                    DropdownMenuItem(value: 'الأعلى تقييماً', child: Text('الأعلى تقييماً')),
+                    DropdownMenuItem(value: 'الأكثر تحميلاً', child: Text('الأكثر تحميلاً')),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _sortBy = value ?? 'الأحدث';
+                    });
+                  },
+                ),
+              ),
+            ],
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // مؤلف محدد
+          TextField(
+            decoration: const InputDecoration(
+              hintText: 'اسم المؤلف (اختياري)',
+              prefixIcon: Icon(Icons.person),
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (value) {
+              setState(() {
+                _authorFilter = value;
+              });
+            },
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // تقييم أدنى
+          Row(
+            children: [
+              const Text('التقييم الأدنى: '),
+              Expanded(
+                child: Slider(
+                  value: _minRating,
+                  min: 0.0,
+                  max: 5.0,
+                  divisions: 10,
+                  label: _minRating.toStringAsFixed(1),
+                  onChanged: (value) {
+                    setState(() {
+                      _minRating = value;
+                    });
+                  },
+                ),
+              ),
+              Text(_minRating.toStringAsFixed(1)),
+            ],
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // زر البحث
+          ElevatedButton(
+            onPressed: _performAdvancedSearch,
+            child: _isLoading 
+                ? const CircularProgressIndicator(color: Colors.white)
+                : const Text('بحث متقدم'),
+          ),
+          
+          const SizedBox(height: 16),
+          
+          // النتائج
+          Expanded(
+            child: _advancedResults == null
+                ? const Center(
+                    child: Text('استخدم خيارات البحث أعلاه للحصول على نتائج مخصصة'),
+                  )
+                : _advancedResults!.isEmpty
+                    ? _buildEmptyState('لم يتم العثور على نتائج', Icons.search_off)
+                    : _buildBooksGrid(_advancedResults!),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildBookCard(BookModel book) => BookCard(book: book);
+  void _performAdvancedSearch() {
+    setState(() {
+      _isLoading = true;
+    });
+
+    // محاكاة تأخير البحث
+    Future.delayed(const Duration(seconds: 1), () {
+      final bookService = Provider.of<BookService>(context, listen: false);
+      List<BookModel> results = bookService.books;
+
+      // تطبيق الفلاتر
+      if (_searchQuery.isNotEmpty) {
+        results = results.where((book) =>
+            book.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+            book.author.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+            book.description.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
+      }
+
+      if (_selectedCategory != 'الكل') {
+        results = results.where((book) => book.category == _selectedCategory).toList();
+      }
+
+      if (_authorFilter.isNotEmpty) {
+        results = results.where((book) =>
+            book.author.toLowerCase().contains(_authorFilter.toLowerCase())).toList();
+      }
+
+      results = results.where((book) => book.averageRating >= _minRating).toList();
+
+      // ترتيب النتائج
+      switch (_sortBy) {
+        case 'الأعلى تقييماً':
+          results.sort((a, b) => b.averageRating.compareTo(a.averageRating));
+          break;
+        case 'الأكثر تحميلاً':
+          results.sort((a, b) => b.downloadCount.compareTo(a.downloadCount));
+          break;
+        case 'الأحدث':
+        default:
+          results.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          break;
+      }
+
+      if (mounted) {
+        setState(() {
+          _advancedResults = results;
+          _isLoading = false;
+        });
+      }
+    });
+  }
+
+  Widget _buildBooksGrid(List<BookModel> books) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: GridView.builder(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 8,
+          mainAxisSpacing: 8,
+          childAspectRatio: 0.75,
+        ),
+        itemCount: books.length,
+        itemBuilder: (context, index) {
+          return MobileBookCard(book: books[index]);
+        },
+      ),
+    );
+  }
 
   Widget _buildEmptyState(String message, IconData icon) {
     return Center(
@@ -301,137 +328,21 @@ class _BooksScreenState extends State<BooksScreen> with TickerProviderStateMixin
         children: [
           Icon(
             icon,
-            size: 100,
-            color: Colors.grey[400],
+            size: 80,
+            color: Colors.grey,
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           Text(
             message,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 18,
-              color: Colors.grey[600],
-              fontWeight: FontWeight.w500,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey,
             ),
+            textAlign: TextAlign.center,
           ),
         ],
       ),
-    );
-  }
-
-  List<BookModel> _sortBooks(List<BookModel> books) {
-    final sorted = List<BookModel>.from(books);
-    
-    switch (_sortBy) {
-      case 'الأحدث':
-        sorted.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        break;
-      case 'الأعلى تقييماً':
-        sorted.sort((a, b) => b.averageRating.compareTo(a.averageRating));
-        break;
-      case 'الأكثر تحميلاً':
-        sorted.sort((a, b) => b.downloadCount.compareTo(a.downloadCount));
-        break;
-      case 'الأبجدي':
-        sorted.sort((a, b) => a.title.compareTo(b.title));
-        break;
-    }
-    
-    return sorted;
-  }
-
-  void _showFilterDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('ترتيب الكتب'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Sort options
-            ...['الأحدث', 'الأعلى تقييماً', 'الأكثر تحميلاً', 'الأبجدي'].map((sortOption) {
-              return RadioListTile<String>(
-                title: Text(sortOption),
-                value: sortOption,
-                groupValue: _sortBy,
-                onChanged: (value) {
-                  setState(() {
-                    _sortBy = value!;
-                  });
-                },
-              );
-            }),
-            const SizedBox(height: 8),
-            // Author filter
-            TextField(
-              decoration: const InputDecoration(labelText: 'مؤلف (احتياطي للبحث على الخادم)'),
-              onChanged: (v) => _authorFilter = v,
-            ),
-            const SizedBox(height: 8),
-            // Min rating
-            Row(
-              children: [
-                const Text('الحد الأدنى للتقييم'),
-                Expanded(
-                  child: Slider(
-                    min: 0,
-                    max: 5,
-                    divisions: 5,
-                    value: _minRating,
-                    label: _minRating.toStringAsFixed(1),
-                    onChanged: (v) => setState(() => _minRating = v),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _applyFilters();
-            },
-            child: const Text('تطبيق'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('إغلاق'),
-          ),
-        ],
-      ),
-    );
-  }
-
-
-  Future<void> _applyFilters() async {
-    setState(() {
-      _isLoading = true;
-    });
-    try {
-      final bookService = Provider.of<BookService>(context, listen: false);
-      final results = await bookService.fetchBooksAdvanced(
-        category: _selectedCategory,
-        author: _authorFilter.isNotEmpty ? _authorFilter : null,
-        minRating: _minRating > 0 ? _minRating : null,
-        sortBy: _sortBy == 'الأعلى تقييماً' ? 'rating' : (_sortBy == 'الأكثر تحميلاً' ? 'downloads' : 'recent'),
-      );
-      setState(() {
-        _advancedResults = results;
-      });
-    } catch (_) {
-      setState(() {
-        _advancedResults = null;
-      });
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
-    }
-  }
-  void _showAddBookDialog() {
-    // TODO: تطبيق صفحة إضافة كتاب جديد
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('قريباً: إضافة كتاب جديد')),
     );
   }
 }

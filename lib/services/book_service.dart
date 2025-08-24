@@ -32,7 +32,6 @@ class BookService extends ChangeNotifier {
 
   // فئات الكتب
   static const List<String> categories = [
-    'الكل',
     'الأدب',
     'العلوم',
     'التاريخ',

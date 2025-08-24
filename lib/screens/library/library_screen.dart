@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 import '../../services/book_service.dart';
 import '../../services/auth_firebase_service.dart';
 import '../../widgets/book_card.dart';
+import '../../widgets/mobile_book_card.dart';
 import '../../models/book_model.dart';
+import '../../utils/enhanced_design_tokens.dart';
 import '../book/book_details_screen.dart';
 
 class LibraryScreen extends StatefulWidget {
@@ -15,39 +17,41 @@ class LibraryScreen extends StatefulWidget {
 
 class _LibraryScreenState extends State<LibraryScreen> with TickerProviderStateMixin {
   late TabController _tabController;
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
+  
   String _query = '';
   String _category = 'الكل';
-  String _sort = 'rating'; // title | rating | downloads
-  bool _grid = true;
+  String _sort = 'rating';
+  bool _isSearchExpanded = false;
+  bool _isGridView = true;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _tabController.addListener(() {
-      if (mounted) setState(() {}); // لإعادة بناء خيارات الفرز حسب التبويب
+      if (mounted) setState(() {});
     });
   }
 
   @override
   void dispose() {
+    _searchController.dispose();
+    _searchFocus.dispose();
     _tabController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final sortOptions = _sortOptionsForTab(_tabController.index);
-    // تأكد أن خيار الفرز الحالي ضمن المتاح للتبويب الحالي
-    if (!sortOptions.any((o) => o.value == _sort)) {
-      _sort = sortOptions.first.value;
-    }
     return Scaffold(
+      backgroundColor: EnhancedAppColors.background,
       body: NestedScrollView(
         headerSliverBuilder: (context, innerScrolled) => [
-          SliverAppBar(
-            title: const Text('مكتبتي'),
+          _buildEnhancedAppBar(),
+          _buildSearchAndFiltersSection(),
+        ],
             pinned: true,
             floating: true,
             snap: true,
@@ -418,7 +422,7 @@ class _LibraryTab extends StatelessWidget {
           return empty ?? const _EmptyState(title: 'لا توجد عناصر', subtitle: 'أضف بعض الكتب أولاً');
         }
 
-        final padding = const EdgeInsets.all(16);
+        final padding = const EdgeInsets.all(8);
         return AnimatedSwitcher(
           duration: const Duration(milliseconds: 250),
           child: grid
@@ -427,21 +431,20 @@ class _LibraryTab extends StatelessWidget {
                   padding: padding,
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
-                    childAspectRatio: .7,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
+                    childAspectRatio: .75,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
                   ),
                   itemCount: books.length,
-                  itemBuilder: (context, i) => BookCard(book: books[i]),
+                  itemBuilder: (context, i) => MobileBookCard(book: books[i]),
                 )
-              : ListView.separated(
+              : ListView.builder(
                   key: const ValueKey('list'),
-                  padding: padding,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
                   itemCount: books.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 12),
                   itemBuilder: (context, i) {
                     final b = books[i];
-                    return _ListTileBook(book: b);
+                    return MobileBookListTile(book: b);
                   },
                 ),
         );

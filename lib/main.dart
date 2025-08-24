@@ -12,11 +12,16 @@ import 'services/book_repository.dart';
 import 'services/auth_firebase_service.dart'; // الخدمة الموحدة للمصادقة
 import 'services/review_service.dart';
 import 'screens/auth/login_screen.dart'; // شاشة تسجيل الدخول المحسّنة
-import 'screens/home/home_screen.dart';
+import 'screens/home/redesigned_home_screen.dart';
 import 'utils/app_theme.dart';
 import 'screens/splash_screen.dart';
 import 'services/theme_service.dart';
+import 'services/enhanced_plan_service.dart';
 import 'services/plan_service.dart';
+import 'services/reading_challenge_service.dart';
+import 'screens/plans/enhanced_plans_screen.dart';
+import 'screens/search/search_screen.dart';
+import 'screens/library/enhanced_library_screen.dart';
 import 'services/reading_list_service.dart';
 import 'services/external_book_search_service.dart';
 import 'screens/plans/plans_hub_screen.dart';
@@ -60,10 +65,12 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (context) => ThemeService()),
         // Register ReviewService so screens can read/write reviews via Provider
         ChangeNotifierProvider(create: (context) => ReviewService()),
-  // خدمات الخطط والقوائم والبحث الخارجي
-  ChangeNotifierProvider(create: (context) => PlanService()),
-  ChangeNotifierProvider(create: (context) => ReadingListService()),
-  ChangeNotifierProvider(create: (context) => ExternalBookSearchService()),
+        // خدمات الخطط والقوائم والبحث الخارجي
+        ChangeNotifierProvider(create: (context) => PlanService()),
+        ChangeNotifierProvider(create: (context) => ReadingListService()),
+        ChangeNotifierProvider(create: (context) => ExternalBookSearchService()),
+        ChangeNotifierProvider(create: (context) => EnhancedPlanService()),
+        ChangeNotifierProvider(create: (context) => ReadingChallengeService()),
       ],
       child: Consumer<ThemeService>(
         builder: (context, themeService, child) {
@@ -87,9 +94,12 @@ class MyApp extends StatelessWidget {
             },
             // Named routes used by various screens (SplashScreen and auth flows)
             routes: {
-              '/home': (context) => const HomeScreen(),
+              '/home': (context) => const RedesignedHomeScreen(),
               '/login': (context) => const LoginScreen(),
               '/plans': (context) => const PlansHubScreen(),
+              '/enhanced-plans': (context) => const EnhancedPlansScreen(),
+              '/search': (context) => const SearchScreen(),
+              '/library': (context) => const EnhancedLibraryScreen(),
             },
             debugShowCheckedModeBanner: false,
             home: Builder(
@@ -110,7 +120,7 @@ class MyApp extends StatelessWidget {
                       return const SplashScreen();
                     }
                     if (snapshot.hasData) {
-                      return const HomeScreen();
+                      return const RedesignedHomeScreen();
                     } else {
                       return const LoginScreen();
                     }
