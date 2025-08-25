@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -25,9 +26,20 @@ import 'screens/library/enhanced_library_screen.dart';
 import 'services/reading_list_service.dart';
 import 'services/external_book_search_service.dart';
 import 'screens/plans/plans_hub_screen.dart';
+import 'utils/web_optimizations.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // تحسينات خاصة بالويب والهواتف المحمولة
+  if (kIsWeb) {
+    // تحسين الأداء على الويب
+    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+    ));
+  }
+  
   // تهيئة Firebase (Placeholders حالياً حتى يتم استبدال القيم عبر flutterfire configure)
   try {
     // على أندرويد، سنعتمد على الضبط الأصلي من google-services.json
@@ -41,8 +53,11 @@ Future<void> main() async {
     // Disable persistence to avoid the "client is offline" errors when IndexedDB isn't usable.
     if (kIsWeb) {
       try {
-        FirebaseFirestore.instance.settings = const Settings(persistenceEnabled: false);
-        debugPrint('Firestore settings: disabled persistence on web');
+        FirebaseFirestore.instance.settings = const Settings(
+          persistenceEnabled: false,
+          cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+        );
+        debugPrint('Firestore settings: disabled persistence on web with unlimited cache');
       } catch (e) {
         debugPrint('Failed to set Firestore settings: $e');
       }
@@ -50,6 +65,12 @@ Future<void> main() async {
   } catch (e) {
     debugPrint('Firebase init skipped/failed: $e');
   }
+  
+  // تفعيل تحسينات الويب للهواتف المحمولة
+  if (kIsWeb) {
+    WebOptimizations.initialize();
+  }
+  
   runApp(const MyApp());
 }
 
