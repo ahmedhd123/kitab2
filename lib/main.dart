@@ -27,6 +27,9 @@ import 'services/reading_list_service.dart';
 import 'services/external_book_search_service.dart';
 import 'screens/plans/plans_hub_screen.dart';
 import 'utils/web_optimizations.dart';
+import 'services/public_challenge_service.dart';
+import 'screens/challenges/reading_goals_screen.dart';
+import 'screens/challenges/public_challenges_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -92,6 +95,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (context) => ExternalBookSearchService()),
         ChangeNotifierProvider(create: (context) => EnhancedPlanService()),
         ChangeNotifierProvider(create: (context) => ReadingChallengeService()),
+  ChangeNotifierProvider(create: (context) => PublicChallengeService()),
       ],
       child: Consumer<ThemeService>(
         builder: (context, themeService, child) {
@@ -121,6 +125,8 @@ class MyApp extends StatelessWidget {
               '/enhanced-plans': (context) => const EnhancedPlansScreen(),
               '/search': (context) => const SearchScreen(),
               '/library': (context) => const EnhancedLibraryScreen(),
+              '/reading-goals': (context) => const ReadingGoalsScreen(),
+              '/public-challenges': (context) => const PublicChallengesScreen(),
             },
             debugShowCheckedModeBanner: false,
             home: Builder(
