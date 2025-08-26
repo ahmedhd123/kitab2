@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace "com.kitab.kitab2"
+    namespace "com.kitab.reader"
     compileSdk 34
 
     compileOptions {
@@ -18,7 +18,7 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.kitab.kitab2"
+    applicationId "com.kitab.reader"
         minSdkVersion flutter.minSdkVersion
         targetSdk 34
         versionCode 1
