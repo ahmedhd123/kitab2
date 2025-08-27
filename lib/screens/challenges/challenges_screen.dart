@@ -1,12 +1,13 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/reading_plan_model.dart';
-import '../../services/auth_service.dart';
+import '../../services/auth_firebase_service.dart';
 import '../../services/reading_challenge_service.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/design_tokens.dart';
 import 'create_challenge_screen.dart';
 
+// تمت إعادة تسمية هذه الشاشة إلى "أهداف القراءة" لكن نُبقي الاسم القديم للتوافق
 class ChallengesScreen extends StatefulWidget {
   const ChallengesScreen({super.key});
 
@@ -31,7 +32,7 @@ class _ChallengesScreenState extends State<ChallengesScreen> with SingleTickerPr
   }
 
   void _loadChallenges() {
-    final authService = Provider.of<AuthService>(context, listen: false);
+  final authService = Provider.of<AuthFirebaseService>(context, listen: false);
     if (authService.currentUser != null) {
       final challengeService = Provider.of<ReadingChallengeService>(context, listen: false);
       challengeService.loadUserChallenges(authService.currentUser!.uid);
@@ -42,7 +43,7 @@ class _ChallengesScreenState extends State<ChallengesScreen> with SingleTickerPr
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('تحديات القراءة'),
+  title: const Text('أهداف القراءة'),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         elevation: 0,

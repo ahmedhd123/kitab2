@@ -121,14 +121,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "7.0.2"
-  epub_viewer:
-    dependency: "direct main"
-    description:
-      name: epub_viewer
-      sha256: "89d8c85f5a8773952e9416a14d97ead283ab8bd0ef9c9709960d2f9909bc6838"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.2.5"
   epubx:
     dependency: "direct main"
     description:

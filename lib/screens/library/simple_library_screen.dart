@@ -3,8 +3,6 @@ import 'package:provider/provider.dart';
 import '../../services/book_service.dart';
 import '../../models/book_model.dart';
 import '../book/book_details_screen.dart';
-import '../../widgets/mobile_book_card.dart';
-import '../../services/auth_firebase_service.dart';
 
 class EnhancedLibraryScreen extends StatefulWidget {
   const EnhancedLibraryScreen({super.key});
@@ -195,44 +193,148 @@ class _EnhancedLibraryScreenState extends State<EnhancedLibraryScreen> with Tick
   }
 
   Widget _buildGridView(List<BookModel> books) {
-    final uid = context.read<AuthFirebaseService>().currentUser?.uid ?? '';
-    final svc = context.read<BookService>();
     return GridView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        childAspectRatio: 0.75,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
+        childAspectRatio: 0.7,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
       ),
       itemCount: books.length,
       itemBuilder: (context, index) {
         final book = books[index];
-        final progress = svc.getReadingProgress(book.id, uid)?.progressPercentage;
-        return MobileBookCard(
-          book: book,
-          onTap: () => _navigateToBookDetails(book),
-          showProgress: _tabController.index == 0 && (progress != null && progress > 0), // إظهار التقدم فقط في تبويب القراءة
-          readingProgress: _tabController.index == 0 ? progress : null,
-        );
+        return _buildBookCard(book);
       },
     );
   }
 
   Widget _buildListView(List<BookModel> books) {
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: books.length,
       itemBuilder: (context, index) {
         final book = books[index];
-        return MobileBookListTile(
-          book: book,
-          onTap: () => _navigateToBookDetails(book),
-          trailing: _tabController.index == 0 
-              ? const Icon(Icons.play_arrow, color: Colors.green)
-              : null,
-        );
+        return _buildBookListItem(book);
       },
+    );
+  }
+
+  Widget _buildBookCard(BookModel book) {
+    return Card(
+      child: InkWell(
+        onTap: () => _navigateToBookDetails(book),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // غلاف الكتاب
+            Expanded(
+              flex: 3,
+              child: Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                  gradient: LinearGradient(
+                    colors: [Colors.blue, Colors.blue.shade700],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                ),
+                child: const Icon(
+                  Icons.menu_book,
+                  size: 48,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+            
+            // معلومات الكتاب
+            Expanded(
+              flex: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      book.title,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      book.author,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        book.category,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Colors.blue,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBookListItem(BookModel book) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        leading: Container(
+          width: 50,
+          height: 70,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            gradient: LinearGradient(
+              colors: [Colors.green, Colors.green.shade700],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: const Icon(Icons.menu_book, color: Colors.white, size: 24),
+        ),
+        title: Text(book.title),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('بقلم: ${book.author}'),
+            const SizedBox(height: 4),
+            if (book.averageRating > 0)
+              Row(
+                children: [
+                  const Icon(Icons.star, color: Colors.amber, size: 16),
+                  const SizedBox(width: 4),
+                  Text('${book.averageRating.toStringAsFixed(1)} (${book.totalReviews})'),
+                ],
+              ),
+          ],
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => _navigateToBookDetails(book),
+      ),
     );
   }
 
