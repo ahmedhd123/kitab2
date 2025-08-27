@@ -41,6 +41,12 @@ Future<void> main() async {
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.light,
     ));
+    
+    // تحسين إعدادات Firestore للويب
+    FirebaseFirestore.instance.settings = const Settings(
+      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+      persistenceEnabled: true,
+    );
   }
   
   // تهيئة Firebase (Placeholders حالياً حتى يتم استبدال القيم عبر flutterfire configure)
@@ -67,11 +73,6 @@ Future<void> main() async {
     }
   } catch (e) {
     debugPrint('Firebase init skipped/failed: $e');
-  }
-  
-  // تفعيل تحسينات الويب للهواتف المحمولة
-  if (kIsWeb) {
-    WebOptimizations.initialize();
   }
   
   runApp(const MyApp());

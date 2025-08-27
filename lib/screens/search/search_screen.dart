@@ -5,6 +5,8 @@ import '../../models/book_model.dart';
 import '../../services/book_service.dart';
 import '../book/book_details_screen.dart';
 import '../../widgets/mobile_book_card.dart';
+import 'popular_books_screen.dart';
+import 'category_books_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -43,7 +45,7 @@ class _SearchScreenState extends State<SearchScreen> {
             // المحتوى الرئيسي
             Expanded(
               child: _searchController.text.isEmpty
-                  ? _buildSearchSuggestions()
+                  ? _buildDiscoverSections()
                   : _buildSearchResults(),
             ),
           ],
@@ -119,6 +121,120 @@ class _SearchScreenState extends State<SearchScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildDiscoverSections() {
+    final bookService = Provider.of<BookService>(context);
+    final popular = bookService.getMostDownloadedBooks(limit: 12);
+    final categories = BookService.categories;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // الأكثر رواجاً
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('🔥 الأكثر رواجاً', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                TextButton(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const PopularBooksScreen()),
+                  ),
+                  child: const Text('عرض الكل'),
+                )
+              ],
+            ),
+          ),
+          SizedBox(
+            height: 240,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              itemCount: popular.length,
+              itemBuilder: (context, index) {
+                final book = popular[index];
+                return Container(
+                  width: 140,
+                  margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  child: MobileBookCard(
+                    book: book,
+                    onTap: () => _navigateToBookDetails(book),
+                  ),
+                );
+              },
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // فئات بعرض أيقونات
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: Text('الفئات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 90,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              itemCount: categories.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (context, index) {
+                final cat = categories[index];
+                return _CategoryIcon(
+                  label: cat,
+                  icon: _iconForCategory(cat),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => CategoryBooksScreen(category: cat)),
+                  ),
+                );
+              },
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // اقتراحات/بحث فارغ سابقاً
+          _buildSearchSuggestions(),
+        ],
+      ),
+    );
+  }
+
+  IconData _iconForCategory(String cat) {
+    switch (cat) {
+      case 'الأدب':
+        return Icons.menu_book;
+      case 'العلوم':
+        return Icons.biotech;
+      case 'التاريخ':
+        return Icons.history_edu;
+      case 'الفلسفة':
+        return Icons.psychology;
+      case 'التكنولوجيا':
+        return Icons.memory;
+      case 'الدين':
+        return Icons.mosque;
+      case 'الطبخ':
+        return Icons.restaurant_menu;
+      case 'الرياضة':
+        return Icons.sports_soccer;
+      case 'السيرة الذاتية':
+        return Icons.person;
+      case 'الخيال العلمي':
+        return Icons.rocket_launch;
+      case 'الرومانسية':
+        return Icons.favorite;
+      default:
+        return Icons.category;
+    }
   }
 
   Widget _buildSearchSuggestions() {
@@ -257,6 +373,45 @@ class _SearchScreenState extends State<SearchScreen> {
       context,
       MaterialPageRoute(
         builder: (_) => BookDetailsScreen(book: book),
+      ),
+    );
+  }
+}
+
+class _CategoryIcon extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+  const _CategoryIcon({required this.label, required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Column(
+        children: [
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              color: Colors.blueAccent.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(icon, color: Colors.blueAccent),
+          ),
+          const SizedBox(height: 6),
+          SizedBox(
+            width: 70,
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12),
+            ),
+          )
+        ],
       ),
     );
   }

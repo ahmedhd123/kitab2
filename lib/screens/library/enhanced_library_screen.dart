@@ -4,6 +4,7 @@ import '../../services/book_service.dart';
 import '../../models/book_model.dart';
 import '../book/book_details_screen.dart';
 import '../../widgets/mobile_book_card.dart';
+import '../../services/auth_firebase_service.dart';
 
 class EnhancedLibraryScreen extends StatefulWidget {
   const EnhancedLibraryScreen({super.key});
@@ -194,6 +195,8 @@ class _EnhancedLibraryScreenState extends State<EnhancedLibraryScreen> with Tick
   }
 
   Widget _buildGridView(List<BookModel> books) {
+    final uid = context.read<AuthFirebaseService>().currentUser?.uid ?? '';
+    final svc = context.read<BookService>();
     return GridView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -205,11 +208,12 @@ class _EnhancedLibraryScreenState extends State<EnhancedLibraryScreen> with Tick
       itemCount: books.length,
       itemBuilder: (context, index) {
         final book = books[index];
+        final progress = svc.getReadingProgress(book.id, uid)?.progressPercentage;
         return MobileBookCard(
           book: book,
           onTap: () => _navigateToBookDetails(book),
-          showProgress: _tabController.index == 0, // إظهار التقدم في تبويب "أقرؤها الآن"
-          readingProgress: _tabController.index == 0 ? 0.3 : null, // محاكاة التقدم
+          showProgress: _tabController.index == 0 && (progress != null && progress > 0), // إظهار التقدم فقط في تبويب القراءة
+          readingProgress: _tabController.index == 0 ? progress : null,
         );
       },
     );

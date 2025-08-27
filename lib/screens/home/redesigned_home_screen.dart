@@ -155,22 +155,22 @@ class _RedesignedHomeScreenState extends State<RedesignedHomeScreen>
               icon: Icon(Icons.search_outlined),
               activeIcon: Icon(Icons.search),
               label: 'البحث',
-            ),
+            },
             BottomNavigationBarItem(
               icon: Icon(Icons.flag_outlined),
               activeIcon: Icon(Icons.flag),
               label: 'الخطط',
-            ),
+            },
             BottomNavigationBarItem(
               icon: Icon(Icons.library_books_outlined),
               activeIcon: Icon(Icons.library_books),
               label: 'مكتبتي',
-            ),
+            },
             BottomNavigationBarItem(
               icon: Icon(Icons.person_outline),
               activeIcon: Icon(Icons.person),
               label: 'الملف الشخصي',
-            ),
+            },
           ],
         ),
       ),
@@ -202,20 +202,6 @@ class _RedesignedHomeScreenState extends State<RedesignedHomeScreen>
             label: 'بدء نقاش',
             color: EnhancedAppColors.accent,
             onTap: () => _navigateToStartDiscussion(),
-          ),
-          const SizedBox(height: 12),
-          _buildFabMenuItem(
-            icon: Icons.rate_review,
-            label: 'كتابة مراجعة',
-            color: const Color(0xFF9C27B0),
-            onTap: () => _navigateToWriteReview(),
-          ),
-          const SizedBox(height: 12),
-          _buildFabMenuItem(
-            icon: Icons.upload_file,
-            label: 'رفع كتاب',
-            color: const Color(0xFF795548),
-            onTap: () => _navigateToUploadBook(),
           ),
           const SizedBox(height: 16),
         ],
@@ -325,20 +311,6 @@ class _RedesignedHomeScreenState extends State<RedesignedHomeScreen>
     _showFeatureComingSoon('بدء نقاش');
   }
 
-  void _navigateToWriteReview() {
-    setState(() => _showFabMenu = false);
-    _fabAnimationController.reverse();
-    
-    _showFeatureComingSoon('كتابة مراجعة');
-  }
-
-  void _navigateToUploadBook() {
-    setState(() => _showFabMenu = false);
-    _fabAnimationController.reverse();
-    
-    _showFeatureComingSoon('رفع كتاب');
-  }
-
   void _showFeatureComingSoon(String featureName) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -412,11 +384,6 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
               
               const SizedBox(height: EnhancedSpacing.xl),
               
-              // إحصائيات المجتمع المرئية
-              _buildVisualCommunityStats(),
-              
-              const SizedBox(height: EnhancedSpacing.xl),
-              
               // تابع القراءة مع تحسينات
               _buildEnhancedContinueReading(),
               
@@ -432,13 +399,13 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
               
               const SizedBox(height: EnhancedSpacing.xl),
               
-              // المراجعات المميزة
-              _buildFeaturedReviews(),
+              // تحديات القراءة
+              _buildReadingChallenges(),
               
               const SizedBox(height: EnhancedSpacing.xl),
               
-              // تحديات القراءة
-              _buildReadingChallenges(),
+              // المراجعات المميزة (نُقلت لأسفل بعد تحديات القراءة)
+              _buildFeaturedReviews(),
               
               const SizedBox(height: 100), // مساحة للـ FAB
             ],
@@ -510,16 +477,21 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(EnhancedSpacing.lg),
-        child: Consumer<AuthFirebaseService>(
-          builder: (context, authService, _) {
+        child: Consumer2<AuthFirebaseService, BookService>(
+          builder: (context, authService, bookService, _) {
             final userName = authService.currentUser?.displayName ?? 'عزيزي القارئ';
             final welcomeTime = _getWelcomeTimeMessage();
+            final booksCount = bookService.books.length;
+            // أرقام توضيحية بسيطة – يمكن ربطها لاحقاً بمصادر حقيقية
+            final activeReaders = 892;
+            final discussions = 156;
             
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // صورة المستخدم المحسنة
                     Container(
@@ -552,7 +524,7 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
                     
                     const SizedBox(width: EnhancedSpacing.lg),
                     
-                    // ترحيب محسن مع الوقت
+                    // ترحيب محسن مع الوقت + إحصائيات المجتمع داخل الهيدر
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -565,9 +537,7 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
                               fontWeight: FontWeight.w500,
                             ),
                           ),
-                          
                           const SizedBox(height: 4),
-                          
                           Text(
                             userName,
                             style: const TextStyle(
@@ -576,9 +546,18 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
                               color: Colors.white,
                             ),
                           ),
-                          
-                          const SizedBox(height: 4),
-                          
+                          const SizedBox(height: 8),
+                          // إحصائيات المجتمع المدمجة في الهيدر
+                          Row(
+                            children: [
+                              _miniStat(icon: Icons.menu_book, value: '$booksCount', label: 'كتاب'),
+                              const SizedBox(width: 10),
+                              _miniStat(icon: Icons.group, value: '$activeReaders', label: 'قارئ نشط'),
+                              const SizedBox(width: 10),
+                              _miniStat(icon: Icons.forum, value: '$discussions', label: 'نقاش'),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
                           Text(
                             'اكتشف عالمك الجديد من المعرفة 📚',
                             style: TextStyle(
@@ -599,6 +578,26 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
     );
   }
 
+  Widget _miniStat({required IconData icon, required String value, required String label}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.white, size: 16),
+          const SizedBox(width: 6),
+          Text(value, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          const SizedBox(width: 4),
+          Text(label, style: TextStyle(color: Colors.white.withOpacity(0.95), fontSize: 12)),
+        ],
+      ),
+    );
+  }
+
   Widget _buildEnhancedSearchBar() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: EnhancedSpacing.lg),
@@ -614,7 +613,7 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
-                hintText: 'ابحث عن كتاب، مؤلف، أو موضوع...',
+                hintText: 'ابحث عن كتاب، مؤلف، أو موضوع... ',
                 hintStyle: const TextStyle(color: EnhancedAppColors.gray500),
                 prefixIcon: const Icon(Icons.search, color: EnhancedAppColors.gray500),
                 suffixIcon: Row(
@@ -645,144 +644,32 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
               },
             ),
           ),
-          
           const SizedBox(height: 12),
-          
           // اقتراحات البحث السريع
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                'الأدب العربي',
-                'روايات تاريخية',
-                'كتب التنمية',
-                'الفلسفة',
-                'العلوم',
-                'السيرة الذاتية',
+                'الأدب العربي', 'روايات تاريخية', 'كتب التنمية', 'الفلسفة', 'العلوم', 'السيرة الذاتية',
               ].map((suggestion) => Container(
                 margin: const EdgeInsets.only(left: 8),
                 child: ActionChip(
                   label: Text(
                     suggestion,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: EnhancedAppColors.primary,
-                    ),
+                    style: const TextStyle(fontSize: 12, color: EnhancedAppColors.primary),
                   ),
                   backgroundColor: EnhancedAppColors.primary.withOpacity(0.1),
                   onPressed: () {
                     _searchController.text = suggestion;
                     widget.switchTab(1);
                   },
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                 ),
               )).toList(),
             ),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildVisualCommunityStats() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: EnhancedSpacing.lg),
-      padding: const EdgeInsets.all(EnhancedSpacing.xl),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFFFF9A56),
-            Color(0xFF10B981),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: EnhancedShadows.medium,
-      ),
-      child: Column(
-        children: [
-          const Text(
-            'إحصائيات المجتمع',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          
-          const SizedBox(height: 20),
-          
-          Consumer2<BookService, AuthFirebaseService>(
-            builder: (context, bookService, authService, _) {
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _buildStatItem(
-                    icon: Icons.trending_up,
-                    value: '1.1k',
-                    label: 'مراجعة',
-                  ),
-                  _buildStatItem(
-                    icon: Icons.menu_book,
-                    value: '${bookService.books.length}',
-                    label: 'كتاب',
-                  ),
-                  _buildStatItem(
-                    icon: Icons.group,
-                    value: '892',
-                    label: 'قارئ نشط',
-                  ),
-                  _buildStatItem(
-                    icon: Icons.forum,
-                    value: '156',
-                    label: 'نقاش',
-                  ),
-                ],
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatItem({
-    required IconData icon,
-    required String value,
-    required String label,
-  }) {
-    return Column(
-      children: [
-        Container(
-          width: 50,
-          height: 50,
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.2),
-            borderRadius: BorderRadius.circular(15),
-          ),
-          child: Icon(icon, color: Colors.white, size: 24),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
-        ),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.white.withOpacity(0.9),
-          ),
-        ),
-      ],
     );
   }
 
@@ -793,13 +680,8 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
         final readingBooks = bookService.getReadingBooks(uid);
         
         if (readingBooks.isEmpty) {
-          return _buildEmptyState(
-            icon: Icons.menu_book_outlined,
-            title: 'ابدأ رحلة القراءة',
-            subtitle: 'اختر كتابك الأول وابدأ المغامرة',
-            actionText: 'اكتشف الكتب',
-            onAction: () => widget.switchTab(1),
-          );
+          // إخفاء قسم "ابدأ رحلة القراءة" تماماً
+          return const SizedBox.shrink();
         }
         
         return _buildSectionWithHeader(
@@ -842,7 +724,7 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // غلاف الكتاب المحسن
+            // غلاف الكتاب المحسنة
             Expanded(
               flex: 3,
               child: Container(
@@ -1223,10 +1105,12 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
   }
 
   Widget _buildReadingChallenges() {
-    return Consumer<ReadingChallengeService>(
-      builder: (context, challengeService, child) {
+    return Consumer3<ReadingChallengeService, BookService, AuthFirebaseService>(
+      builder: (context, challengeService, bookService, authService, child) {
         final currentChallenge = challengeService.currentYearChallenge;
-        
+        final uid = authService.currentUser?.uid ?? '';
+        final completedFromBooks = uid.isEmpty ? 0 : bookService.getCompletedBooks(uid).length;
+
         if (currentChallenge == null) {
           // لا يوجد تحدي نشط - عرض دعوة لإنشاء تحدي
           return _buildSectionWithHeader(
@@ -1262,9 +1146,7 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    
                     const SizedBox(height: 8),
-                    
                     Text(
                       'ابدأ تحدي القراءة وحدد هدفاً لعدد الكتب التي تريد قراءتها',
                       style: TextStyle(
@@ -1272,9 +1154,7 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
                         fontSize: 14,
                       ),
                     ),
-                    
                     const SizedBox(height: 16),
-                    
                     ElevatedButton.icon(
                       onPressed: _navigateToCreateChallenge,
                       icon: const Icon(Icons.emoji_events, size: 20),
@@ -1293,18 +1173,20 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
             ),
           );
         }
-        
-        // عرض التحدي النشط
-        final progress = currentChallenge.challengeProgress;
-        final completedBooks = currentChallenge.completedBooks ?? 0;
+
+        // عرض التحدي النشط - حساب ديناميكي للتقدم بناءً على الكتب المكتملة
         final targetBooks = currentChallenge.targetBooks ?? 0;
+        final completedBooks = completedFromBooks;
+        final progress = targetBooks > 0
+            ? (completedBooks / targetBooks).clamp(0.0, 1.0)
+            : currentChallenge.challengeProgress;
         final progressPercent = (progress * 100).round();
-        
+
         // حساب الأيام المتبقية
         final now = DateTime.now();
         final endDate = currentChallenge.endAt ?? DateTime(now.year, 12, 31);
         final daysRemaining = endDate.difference(now).inDays;
-        
+
         return _buildSectionWithHeader(
           title: '🏆 تحديات القراءة',
           subtitle: 'تحدى نفسك وحقق أهدافك',
@@ -1312,8 +1194,8 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
           child: Container(
             height: 150,
             margin: const EdgeInsets.symmetric(horizontal: EnhancedSpacing.lg),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
@@ -1322,7 +1204,6 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
                 ],
               ),
               borderRadius: BorderRadius.circular(20),
-              boxShadow: EnhancedShadows.medium,
             ),
             child: Padding(
               padding: const EdgeInsets.all(20),
@@ -1361,11 +1242,9 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
                       ),
                     ],
                   ),
-                  
                   const SizedBox(height: 12),
-                  
                   Text(
-                    targetBooks > completedBooks 
+                    targetBooks > completedBooks
                         ? 'اقرأ ${targetBooks - completedBooks} كتب أخرى لتحقيق هدفك!'
                         : '🎉 تهانينا! لقد حققت هدفك!',
                     style: TextStyle(
@@ -1373,10 +1252,7 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
                       fontSize: 14,
                     ),
                   ),
-                  
                   const SizedBox(height: 16),
-                  
-                  // شريط التقدم
                   ClipRRect(
                     borderRadius: BorderRadius.circular(10),
                     child: LinearProgressIndicator(
@@ -1386,9 +1262,7 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
                       minHeight: 8,
                     ),
                   ),
-                  
                   const SizedBox(height: 12),
-                  
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -1401,9 +1275,7 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
                         ),
                       ),
                       Text(
-                        daysRemaining > 0 
-                            ? '$daysRemaining أيام متبقية'
-                            : 'انتهى التحدي',
+                        daysRemaining > 0 ? '$daysRemaining أيام متبقية' : 'انتهى التحدي',
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.9),
                           fontSize: 12,
@@ -1420,60 +1292,71 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
     );
   }
 
+  // الأدوات المساعدة
+  String _getWelcomeTimeMessage() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'صباح الخير';
+    if (hour < 18) return 'مساء الخير';
+    return 'مرحباً مجدداً';
+  }
+
+  void _navigateToNotifications() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('الإشعارات قيد التطوير')),
+    );
+  }
+
   Widget _buildSectionWithHeader({
     required String title,
-    required String subtitle,
-    required Widget child,
+    String? subtitle,
     VoidCallback? onSeeAll,
+    required Widget child,
   }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: EnhancedSpacing.lg),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: EnhancedAppColors.gray800,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: EnhancedSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: EnhancedSpacing.lg),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: EnhancedAppColors.gray900,
+                      ),
                     ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: EnhancedAppColors.gray600,
-                    ),
-                  ),
-                ],
-              ),
-              
-              if (onSeeAll != null)
-                TextButton(
-                  onPressed: onSeeAll,
-                  child: const Text(
-                    'عرض الكل',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: EnhancedAppColors.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: EnhancedAppColors.gray600,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-            ],
+                if (onSeeAll != null)
+                  TextButton(
+                    onPressed: onSeeAll,
+                    child: const Text('عرض الكل'),
+                  ),
+              ],
+            ),
           ),
-        ),
-        
-        const SizedBox(height: 16),
-        child,
-      ],
+          const SizedBox(height: EnhancedSpacing.md),
+          child,
+        ],
+      ),
     );
   }
 
@@ -1481,83 +1364,38 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
     required IconData icon,
     required String title,
     required String subtitle,
-    required String actionText,
-    required VoidCallback onAction,
+    String? actionText,
+    VoidCallback? onAction,
   }) {
-    return Container(
-      margin: const EdgeInsets.all(EnhancedSpacing.lg),
-      padding: const EdgeInsets.all(EnhancedSpacing.xl),
-      decoration: BoxDecoration(
-        color: EnhancedAppColors.gray50,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: EnhancedAppColors.gray200),
-      ),
-      child: Column(
-        children: [
-          Icon(
-            icon,
-            size: 64,
-            color: EnhancedAppColors.gray400,
-          ),
-          
-          const SizedBox(height: 16),
-          
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: EnhancedAppColors.gray700,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          
-          const SizedBox(height: 8),
-          
-          Text(
-            subtitle,
-            style: const TextStyle(
-              fontSize: 14,
-              color: EnhancedAppColors.gray600,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          
-          const SizedBox(height: 16),
-          
-          ElevatedButton(
-            onPressed: onAction,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: EnhancedAppColors.primary,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: EnhancedSpacing.lg),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: EnhancedShadows.soft,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Icon(icon, size: 32, color: EnhancedAppColors.gray400),
+            const SizedBox(height: 8),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            Text(subtitle, style: const TextStyle(color: EnhancedAppColors.gray600)),
+            if (actionText != null && onAction != null) ...[
+              const SizedBox(height: 12),
+              ElevatedButton(
+                onPressed: onAction,
+                child: Text(actionText),
               ),
-            ),
-            child: Text(actionText),
-          ),
-        ],
+            ],
+          ],
+        ),
       ),
     );
-  }
-
-  // Helper Methods
-  String _getWelcomeTimeMessage() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'صباح الخير ☀️';
-    if (hour < 18) return 'مساء الخير 🌤️';
-    return 'مساء الخير 🌙';
-  }
-
-  void _navigateToNotifications() {
-    // TODO: تطبيق التنقل لصفحة الإشعارات
-    _showFeatureComingSoon('الإشعارات');
-  }
-
-  void _navigateToRecommendations() {
-    // TODO: تطبيق التنقل لصفحة التوصيات
-    _showFeatureComingSoon('التوصيات');
   }
 
   void _navigateToBookDetails(BookModel book) {
@@ -1569,302 +1407,63 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
     );
   }
 
-  void _navigateToTrendingBooks() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const BooksScreen(),
-      ),
+  void _navigateToRecommendations() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('التوصيات قيد التطوير')),
     );
   }
 
-  void _navigateToAddBook() {
-    // TODO: تطبيق التنقل لصفحة إضافة كتاب
-    _showFeatureComingSoon('إضافة كتاب');
+  void _navigateToTrendingBooks() {
+    widget.switchTab(1);
   }
 
   void _navigateToReviews() {
-    // جلب المراجعات الحقيقية من ReviewService
-    final reviewService = Provider.of<ReviewService>(context, listen: false);
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => Scaffold(
-          appBar: AppBar(
-            title: const Text('المراجعات المميزة'),
-            backgroundColor: EnhancedAppColors.primary,
-            foregroundColor: Colors.white,
-          ),
-          body: Consumer<ReviewService>(
-            builder: (context, service, child) {
-              return FutureBuilder(
-                future: Future.value(<ReviewModel>[]), // إذا كان متوفر
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  
-                  if (snapshot.hasError) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.error, size: 64, color: Colors.grey),
-                          const SizedBox(height: 16),
-                          Text('خطأ في تحميل المراجعات: ${snapshot.error}'),
-                        ],
-                      ),
-                    );
-                  }
-                  
-                  // استخدام البيانات الوهمية في الوقت الحالي
-                  return const Center(
-                    child: Text('المراجعات قريباً...'),
-                  );
-                },
-              );
-            },
-          ),
-        ),
-      ),
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('المراجعات قيد التطوير')),
     );
   }
 
   void _navigateToChallenges() {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => const ChallengesScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => const ChallengesScreen()),
+    );
+  }
+
+  void _navigateToAddBook() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('إضافة كتاب قيد التطوير')),
+    );
+  }
+
+  void _toggleLike(Map<String, Object> review) {
+    setState(() {
+      final liked = (review['isLiked'] as bool?) ?? false;
+      final likes = (review['likesCount'] as int?) ?? 0;
+      review['isLiked'] = !liked;
+      review['likesCount'] = likes + (liked ? -1 : 1);
+    });
+  }
+
+  void _replyToReview(Map<String, Object> review) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('الرد على مراجعة: ${review['reviewerName']}')),
+    );
+  }
+
+  void _shareReview(Map<String, Object> review) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('مشاركة مراجعة: ${review['bookTitle']}')),
     );
   }
 
   void _showAdvancedSearch() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => _buildAdvancedSearchSheet(),
-    );
+    widget.switchTab(1);
   }
 
-  void _scanBarcode() {
-    // TODO: تطبيق مسح الباركود
-    _showFeatureComingSoon('مسح الباركود');
-  }
-
-  void _toggleLike(Map<String, dynamic> review) {
-    // TODO: تطبيق تبديل الإعجاب
-    _showFeatureComingSoon('الإعجاب بالمراجعة');
-  }
-
-  void _replyToReview(Map<String, dynamic> review) {
-    // TODO: تطبيق الرد على المراجعة
-    _showFeatureComingSoon('الرد على المراجعة');
-  }
-
-  void _shareReview(Map<String, dynamic> review) {
-    // TODO: تطبيق مشاركة المراجعة
-    _showFeatureComingSoon('مشاركة المراجعة');
-  }
-
-  void _showFeatureComingSoon(String featureName) {
+  Future<void> _scanBarcode() async {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$featureName قريباً...'),
-        backgroundColor: EnhancedAppColors.info,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
-  }
-
-  // دوال التنقل الجديدة لزر +
-  void _navigateToCreateChallenge() {
-    setState(() => _showFabMenu = false);
-    _fabAnimationController.reverse();
-    
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const CreateChallengeScreen(),
-      ),
-    );
-  }
-
-  void _navigateToCreatePlan() {
-    setState(() => _showFabMenu = false);
-    _fabAnimationController.reverse();
-    
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const EnhancedPlansScreen(),
-      ),
-    );
-  }
-
-  void _navigateToStartDiscussion() {
-    setState(() => _showFabMenu = false);
-    _fabAnimationController.reverse();
-    
-    _showFeatureComingSoon('بدء نقاش');
-  }
-
-  void _navigateToWriteReview() {
-    setState(() => _showFabMenu = false);
-    _fabAnimationController.reverse();
-    
-    _showFeatureComingSoon('كتابة مراجعة');
-  }
-
-  void _navigateToUploadBook() {
-    setState(() => _showFabMenu = false);
-    _fabAnimationController.reverse();
-    
-    _showFeatureComingSoon('رفع كتاب');
-  }
-
-  Widget _buildAdvancedSearchSheet() {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.7,
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // مقبض السحب
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: EnhancedAppColors.gray300,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          
-          const SizedBox(height: 20),
-          
-          const Text(
-            'البحث المتقدم',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: EnhancedAppColors.gray800,
-            ),
-          ),
-          
-          const SizedBox(height: 20),
-          
-          // مرشحات البحث
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // الفئات
-                  const Text(
-                    'الفئات',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: EnhancedAppColors.gray700,
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 12),
-                  
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: BookService.categories.map((category) {
-                      return FilterChip(
-                        label: Text(category),
-                        selected: false, // TODO: ربط بحالة التطبيق
-                        onSelected: (selected) {
-                          // TODO: تطبيق الفلتر
-                        },
-                        selectedColor: EnhancedAppColors.primary.withOpacity(0.2),
-                        checkmarkColor: EnhancedAppColors.primary,
-                      );
-                    }).toList(),
-                  ),
-                  
-                  const SizedBox(height: 24),
-                  
-                  // التقييم
-                  const Text(
-                    'التقييم',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: EnhancedAppColors.gray700,
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 12),
-                  
-                  // مرشحات التقييم
-                  ...List.generate(5, (index) {
-                    final stars = 5 - index;
-                    return CheckboxListTile(
-                      title: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          ...List.generate(stars, (i) => const Icon(
-                            Icons.star,
-                            color: Colors.amber,
-                            size: 16,
-                          )),
-                          ...List.generate(5 - stars, (i) => const Icon(
-                            Icons.star_border,
-                            color: Colors.grey,
-                            size: 16,
-                          )),
-                          const SizedBox(width: 8),
-                          Text('$stars نجوم وأكثر'),
-                        ],
-                      ),
-                      value: false, // TODO: ربط بحالة التطبيق
-                      onChanged: (value) {
-                        // TODO: تطبيق الفلتر
-                      },
-                      activeColor: EnhancedAppColors.primary,
-                    );
-                  }),
-                ],
-              ),
-            ),
-          ),
-          
-          // أزرار العمل
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('إلغاء'),
-                ),
-              ),
-              
-              const SizedBox(width: 12),
-              
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    widget.switchTab(1); // انتقال للبحث
-                  },
-                  child: const Text('البحث'),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+      const SnackBar(content: Text('ماسح الباركود قيد التطوير')),
     );
   }
 }

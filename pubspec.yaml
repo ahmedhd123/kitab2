@@ -26,8 +26,6 @@ dependencies:
   # عارض PDF يدعم الويب (Syncfusion)
   # تم تعليق الاعتماد على syncfusion_flutter_pdfviewer مؤقتاً بسبب تعارض intl
   # syncfusion_flutter_pdfviewer: ^28.2.7
-  # قارئ EPUB (قد يحتاج تحديث/بديل لاحقاً حسب التوافق)
-  epub_viewer: 0.2.5
   # EPUB parsing and in-app rendering
   # (removed experimental packages to keep dependency resolution stable)
   # للوصول إلى المسارات المحلية (مستخدم بالفعل في قارئ الكتب)
