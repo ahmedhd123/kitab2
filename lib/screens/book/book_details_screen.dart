@@ -103,12 +103,21 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
         actions: [
           Consumer<AuthFirebaseService>(
             builder: (context, auth, _) {
-              final isOwner = auth.currentUser?.uid == widget.book.uploadedBy;
-              if (!isOwner) return const SizedBox.shrink();
-              return IconButton(
-                tooltip: 'تعديل/حذف',
-                icon: const Icon(Icons.edit_note, color: Colors.white),
-                onPressed: _showEditMenu,
+              final uid = auth.currentUser?.uid;
+              if (uid == null) return const SizedBox.shrink();
+              final email = auth.currentUser?.email ?? '';
+              return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
+                builder: (context, snap) {
+                  final isOwner = uid == widget.book.uploadedBy;
+                  final can = (email == 'a@b.com') || (snap.data?.data()?['canUploadBooks'] == true);
+                  if (!isOwner && !can) return const SizedBox.shrink();
+                  return IconButton(
+                    tooltip: 'تعديل/حذف',
+                    icon: const Icon(Icons.edit_note, color: Colors.white),
+                    onPressed: _showEditMenu,
+                  );
+                },
               );
             },
           ),
@@ -149,8 +158,24 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
                 return;
               }
               if (value == 'edit') {
+                final email = auth.currentUser?.email ?? '';
+                bool can = false;
+                try {
+                  if (email == 'a@b.com') {
+                    can = true;
+                  } else {
+                    final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+                    can = (doc.data()?['canUploadBooks'] == true);
+                  }
+                } catch (_) {}
                 final isOwner = uid == widget.book.uploadedBy;
-                if (isOwner) _showEditMenu();
+                if (isOwner || can) {
+                  _showEditMenu();
+                } else {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ليس لديك صلاحية تعديل هذا الكتاب')));
+                  }
+                }
                 return;
               }
               if (value == 'review') {
@@ -170,13 +195,13 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('فشل في إضافة الكتاب')));
               }
             },
-            itemBuilder: (ctx) => [
-              const PopupMenuItem(value: 'reading', child: Text('أضف إلى: أقرأ الآن')),
-              const PopupMenuItem(value: 'completed', child: Text('أضف إلى: مُكتمل')),
-              const PopupMenuItem(value: 'want', child: Text('أضف إلى: أريد قراءته')),
-              const PopupMenuDivider(),
-              const PopupMenuItem(value: 'edit', child: Text('تعديل الكتاب')),
-              const PopupMenuItem(value: 'review', child: Text('أضف مراجعة')),
+            itemBuilder: (ctx) => const [
+              PopupMenuItem(value: 'reading', child: Text('أضف إلى: أقرأ الآن')),
+              PopupMenuItem(value: 'completed', child: Text('أضف إلى: مُكتمل')),
+              PopupMenuItem(value: 'want', child: Text('أضف إلى: أريد قراءته')),
+              PopupMenuDivider(),
+              PopupMenuItem(value: 'edit', child: Text('تعديل الكتاب')),
+              PopupMenuItem(value: 'review', child: Text('أضف مراجعة')),
             ],
           ),
         ],
@@ -629,8 +654,7 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
                   ]),
                 ]),
               ),
-            ),
-          );
+            );
         });
       },
     );

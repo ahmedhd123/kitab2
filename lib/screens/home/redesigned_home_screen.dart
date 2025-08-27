@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../models/book_model.dart';
 import '../../models/external_book_model.dart';
@@ -23,6 +24,7 @@ import '../plans/plans_hub_screen.dart';
 import '../search/search_screen.dart';
 import '../challenges/create_challenge_screen.dart';
 import '../challenges/challenges_screen.dart';
+import 'upload_book_screen.dart';
 
 import '../../widgets/enhanced_book_cards.dart';
 import '../../widgets/social_community_widgets.dart';
@@ -145,7 +147,7 @@ class _RedesignedHomeScreenState extends State<RedesignedHomeScreen>
           unselectedLabelStyle: const TextStyle(
             fontSize: 11,
           ),
-          items: const [
+          items: [
             BottomNavigationBarItem(
               icon: Icon(Icons.home_outlined),
               activeIcon: Icon(Icons.home),
@@ -155,22 +157,22 @@ class _RedesignedHomeScreenState extends State<RedesignedHomeScreen>
               icon: Icon(Icons.search_outlined),
               activeIcon: Icon(Icons.search),
               label: 'البحث',
-            },
+            ),
             BottomNavigationBarItem(
               icon: Icon(Icons.flag_outlined),
               activeIcon: Icon(Icons.flag),
               label: 'الخطط',
-            },
+            ),
             BottomNavigationBarItem(
               icon: Icon(Icons.library_books_outlined),
               activeIcon: Icon(Icons.library_books),
               label: 'مكتبتي',
-            },
+            ),
             BottomNavigationBarItem(
               icon: Icon(Icons.person_outline),
               activeIcon: Icon(Icons.person),
               label: 'الملف الشخصي',
-            },
+            ),
           ],
         ),
       ),
@@ -197,6 +199,33 @@ class _RedesignedHomeScreenState extends State<RedesignedHomeScreen>
             onTap: () => _navigateToCreatePlan(),
           ),
           const SizedBox(height: 12),
+          // زر "رفع كتاب" يظهر فقط إن كانت للمستخدم صلاحية الرفع
+          Consumer<AuthFirebaseService>(
+            builder: (context, auth, _) {
+              final uid = auth.currentUser?.uid;
+              final email = auth.currentUser?.email ?? '';
+              if (uid == null) return const SizedBox.shrink();
+              return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
+                builder: (context, snap) {
+                  final can = (email == 'a@b.com') || (snap.data?.data()?['canUploadBooks'] == true);
+                  if (!can) return const SizedBox.shrink();
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildFabMenuItem(
+                        icon: Icons.upload_file,
+                        label: 'رفع كتاب',
+                        color: EnhancedAppColors.accentDark,
+                        onTap: () => _navigateToAddBook(),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                  );
+                },
+              );
+            },
+          ),
           _buildFabMenuItem(
             icon: Icons.forum,
             label: 'بدء نقاش',
@@ -320,6 +349,33 @@ class _RedesignedHomeScreenState extends State<RedesignedHomeScreen>
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
+  }
+
+  Future<void> _navigateToAddBook() async {
+    final auth = context.read<AuthFirebaseService>();
+    final uid = auth.currentUser?.uid;
+    final email = auth.currentUser?.email ?? '';
+    if (uid == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('يرجى تسجيل الدخول أولاً')));
+      return;
+    }
+    try {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final can = (email == 'a@b.com') || (doc.data()?['canUploadBooks'] == true);
+      if (!mounted) return;
+      if (can) {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const UploadBookScreen()));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('ليس لديك صلاحية رفع الكتب. اطلب الإذن من المشرف.')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذر التحقق من الصلاحية: $e')),
+      );
+    }
   }
 }
 
@@ -1194,7 +1250,7 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
           child: Container(
             height: 150,
             margin: const EdgeInsets.symmetric(horizontal: EnhancedSpacing.lg),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -1430,10 +1486,39 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
     );
   }
 
-  void _navigateToAddBook() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('إضافة كتاب قيد التطوير')),
+  // إضافة دالة التنقل لإنشاء التحدي داخل صفحة الرئيسية
+  void _navigateToCreateChallenge() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const CreateChallengeScreen()),
     );
+  }
+
+  Future<void> _navigateToAddBook() async {
+    final auth = context.read<AuthFirebaseService>();
+    final uid = auth.currentUser?.uid;
+    final email = auth.currentUser?.email ?? '';
+    if (uid == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('يرجى تسجيل الدخول أولاً')));
+      return;
+    }
+    try {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final can = (email == 'a@b.com') || (doc.data()?['canUploadBooks'] == true);
+      if (!mounted) return;
+      if (can) {
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const UploadBookScreen()));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('ليس لديك صلاحية رفع الكتب. اطلب الإذن من المشرف.')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تعذر التحقق من الصلاحية: $e')),
+      );
+    }
   }
 
   void _toggleLike(Map<String, Object> review) {

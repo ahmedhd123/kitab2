@@ -149,6 +149,34 @@ class _MobileBookCardState extends State<MobileBookCard>
         ),
         child: Stack(
           children: [
+            // صورة الغلاف
+            Positioned.fill(
+              child: widget.book.coverImageUrl.isNotEmpty
+                  ? ClipRRect(
+                      child: Image.network(
+                        widget.book.coverImageUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (c, e, s) => _fallbackCover(),
+                      ),
+                    )
+                  : _fallbackCover(),
+            ),
+            // تدرج غامق لتحسين قابلية قراءة النص فوق الصورة
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withOpacity(0.10),
+                      Colors.black.withOpacity(0.35),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
             // أيقونة الكتاب الرئيسية
             Center(
               child: Container(
@@ -248,6 +276,18 @@ class _MobileBookCardState extends State<MobileBookCard>
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _fallbackCover() {
+    return Container(
+      alignment: Alignment.center,
+      color: _categoryColor.withOpacity(0.25),
+      child: Icon(
+        Icons.menu_book_rounded,
+        size: 48,
+        color: Colors.white.withOpacity(0.9),
       ),
     );
   }

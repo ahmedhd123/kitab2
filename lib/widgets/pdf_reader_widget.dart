@@ -6,6 +6,7 @@ import 'package:flutter_pdfview/flutter_pdfview.dart';
 import '../services/book_service.dart';
 import '../services/auth_firebase_service.dart';
 import '../models/book_model.dart';
+import '../utils/enhanced_design_tokens.dart';
 
 /// قارئ PDF داخلي محسن (لغير الويب حالياً) مع شريط أدوات ومزامنة أسرع
 class PdfReaderWidget extends StatefulWidget {
@@ -28,6 +29,7 @@ class _PdfReaderWidgetState extends State<PdfReaderWidget> {
   Timer? _remoteSyncTimer; // مزامنة أسرع مع السحابة
   bool _updating = false;
   final ValueNotifier<double> _fontScale = ValueNotifier(1.0); // محاكاة التكبير (مستقبلاً مع مكتبة أخرى)
+  bool _paperMode = true; // وضع الورق الأصفر
 
   @override
   void initState() {
@@ -100,14 +102,17 @@ class _PdfReaderWidgetState extends State<PdfReaderWidget> {
       behavior: HitTestBehavior.opaque,
       onTap: _toggleUI,
       child: Stack(children: [
+        // خلفية ورقية مريحة للعين
+        Positioned.fill(child: Container(color: _paperMode ? EnhancedAppColors.paperYellow : Colors.black)),
         Positioned.fill(
           child: PDFView(
             filePath: widget.localFilePath,
             defaultPage: _page - 1,
             enableSwipe: true,
-            swipeHorizontal: false,
+            swipeHorizontal: true, // سحب أفقي للتنقل بين الصفحات
             autoSpacing: true,
             pageSnap: true,
+            fitPolicy: FitPolicy.WIDTH, // ملاءمة المحتوى لعرض الشاشة
             onRender: (pages) {
               setState(() => _total = pages ?? 0);
               _saveProgress();
@@ -165,6 +170,13 @@ class _PdfReaderWidgetState extends State<PdfReaderWidget> {
               Text('${(scale * 100).toInt()}%', style: const TextStyle(color: Colors.white, fontSize: 12)),
               _iconBtn(Icons.add, () => _fontScale.value = (scale + .1).clamp(.5, 2.0)),
             ]),
+          ),
+          const SizedBox(width: 6),
+          // تبديل وضع الورق الأصفر
+          IconButton(
+            tooltip: 'وضع الورق الأصفر',
+            icon: Icon(_paperMode ? Icons.style : Icons.style_outlined, color: Colors.amberAccent),
+            onPressed: () => setState(() => _paperMode = !_paperMode),
           ),
         ]),
       ),

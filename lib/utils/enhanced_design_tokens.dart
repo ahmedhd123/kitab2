@@ -55,6 +55,11 @@ class EnhancedAppColors {
   static const Color gray800 = Color(0xFF1F2937);
   static const Color gray900 = Color(0xFF111827);
   
+  // ألوان وضع القراءة - ورق أصفر ناعم وحبر داكن
+  // للاستخدام في قارئ الكتب لمحاكاة لون الورق التقليدي
+  static const Color paperYellow = Color(0xFFFAF3DD); // أصفر باهت مريح للعين
+  static const Color paperInk = Color(0xFF3B3A2E); // لون حبر داكن مائل للبني
+  
   // ألوان الفئات الأدبية المحسّنة
   static const Map<String, List<Color>> categoryGradients = {
     'الأدب': [Color(0xFFFF6B6B), Color(0xFFFF8787)], // أحمر دافئ

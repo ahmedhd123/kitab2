@@ -3,9 +3,10 @@ import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:firebase_storage/firebase_storage.dart' as firebase_storage;
 // ignore: avoid_web_libraries_in_flutter
 // استبدلنا فتح التبويب المخصص بعرض مدمج PDF.js
 // نستخدم platformViewRegistry لتسجيل iframe للويب
@@ -90,50 +91,76 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
 
   Future<void> _downloadAndOpenBook() async {
     try {
-      setState(() {
-        _isLoading = true;
-      });
+      setState(() => _isLoading = true);
 
       if (kIsWeb) {
-        // على الويب: استخدم الرابط مباشرة (يُعرض لاحقاً في _buildPDFReader)
         _localFilePath = widget.book!.fileUrl;
         _isLoading = false;
         if (mounted) setState(() {});
         return;
       }
 
-  final src = widget.book!.fileUrl;
-      // EPUB لا يحتاج تنزيل هنا (سيعالج في EpubReaderWidget)
-      if (!src.toLowerCase().endsWith('.pdf')) {
+      final src = widget.book!.fileUrl.trim();
+      final fileType = widget.book!.fileType.toLowerCase();
+
+      // لا تحاول تنزيل EPUB هنا (سيتم معالجته داخل EpubReaderWidget)
+      if (fileType == 'epub') {
         _isLoading = false;
         if (mounted) setState(() {});
         return;
       }
-  List<int> bytes;
-      if (src.startsWith('assets/')) {
-        final data = await rootBundle.load(src);
-        bytes = data.buffer.asUint8List();
-      } else if (src.startsWith('http://') || src.startsWith('https://')) {
-        final resp = await http.get(Uri.parse(src));
-        if (resp.statusCode != 200) throw 'HTTP ${resp.statusCode}';
-        bytes = resp.bodyBytes;
-      } else {
-        final f = File(src);
-        if (!(await f.exists())) throw 'الملف غير موجود';
-        bytes = await f.readAsBytes();
+
+      // اعتبره PDF إن كان النوع PDF حتى لو كان الرابط لا ينتهي بـ .pdf
+      List<int> bytes = <int>[];
+
+      // دعم روابط Firebase Storage بصيغة gs://
+      try {
+        if (src.startsWith('gs://')) {
+          // تجلب رابط التحميل المباشر
+          // ملاحظة: يتطلب firebase_storage في pubspec (موجود بالفعل)
+          // التجميع الشرطي لتفادي أخطاء الويب غير ضروري هنا لأن هذا الفرع على الأجهزة فقط
+          // ignore: avoid_dynamic_calls
+          final storage = firebase_storage.FirebaseStorage.instance;
+          final downloadUrl = await storage.refFromURL(src).getDownloadURL();
+          final resp = await http.get(Uri.parse(downloadUrl));
+          if (resp.statusCode != 200) throw 'HTTP ${resp.statusCode}';
+          bytes = resp.bodyBytes;
+        }
+      } catch (_) {
+        // سنجرب المسارات الأخرى أدناه
       }
-  final docsDir = await getApplicationDocumentsDirectory();
-  final fileName2 = src.split('/').last;
-  final localFile2 = File('${docsDir.path}/$fileName2');
-  await localFile2.writeAsBytes(bytes, flush: true);
-  _localFilePath = localFile2.path;
+
+      if (bytes.isEmpty) {
+        if (src.startsWith('assets/')) {
+          final data = await rootBundle.load(src);
+          bytes = data.buffer.asUint8List();
+        } else if (src.startsWith('http://') || src.startsWith('https://')) {
+          // اتبع التحويلات وتجاوز مشاكل بعض الرؤوس
+          final resp = await http.get(Uri.parse(src));
+          if (resp.statusCode != 200) throw 'HTTP ${resp.statusCode}';
+          bytes = resp.bodyBytes;
+        } else {
+          final f = File(src);
+          if (!(await f.exists())) throw 'الملف غير موجود';
+          bytes = await f.readAsBytes();
+        }
+      }
+
+      // احفظ لملف محلي مع امتداد .pdf لضمان عمل flutter_pdfview
+      final docsDir = await getApplicationDocumentsDirectory();
+      final srcName = src.split('?').first.split('/').last;
+      final baseName = srcName.isEmpty ? 'book' : srcName;
+      final outName = baseName.toLowerCase().endsWith('.pdf') ? baseName : '$baseName.pdf';
+      final localFile = File('${docsDir.path}/$outName');
+      await localFile.writeAsBytes(bytes, flush: true);
+      _localFilePath = localFile.path;
+
       _isLoading = false;
       if (mounted) setState(() {});
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
+      _isLoading = false;
       if (mounted) {
+        setState(() {});
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('تعذر تحميل الملف: $e'),

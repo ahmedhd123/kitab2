@@ -7,6 +7,7 @@ import '../library/enhanced_library_screen.dart';
 import '../plans/enhanced_plans_screen.dart';
 import 'my_reviews_screen.dart';
 import '../../services/book_service.dart';
+import '../home/upload_book_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -44,6 +45,7 @@ class ProfileScreen extends StatelessWidget {
           final email = user.email ?? '';
           final photoURL = (data['photoURL'] as String?)?.isNotEmpty == true ? data['photoURL'] as String : user.photoURL;
           final bio = data['bio'] as String? ?? '';
+          final canUpload = data['canUploadBooks'] == true;
 
           return CustomScrollView(
             slivers: [
@@ -63,6 +65,24 @@ class ProfileScreen extends StatelessWidget {
               // تم نقل الإحصاءات الحية إلى داخل بطاقة الهيدر
               SliverToBoxAdapter(child: _QuickActions()),
               SliverToBoxAdapter(child: const SizedBox(height: 24)),
+              // زر سريع لرفع كتاب إذا كان المستخدم مخولاً
+              if (canUpload || email == 'a@b.com')
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  sliver: SliverToBoxAdapter(
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.upload_file),
+                        label: const Text('رفع كتاب'),
+                        onPressed: () {
+                          Navigator.of(context).push(MaterialPageRoute(builder: (_) => const UploadBookScreen()));
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              const SliverToBoxAdapter(child: SizedBox(height: 12)),
               // إعدادات/مساعدة
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -88,6 +108,13 @@ class ProfileScreen extends StatelessWidget {
                         );
                       },
                     ),
+                    if (email == 'a@b.com') const Divider(height: 0),
+                    if (email == 'a@b.com')
+                      _SettingsTile(
+                        icon: Icons.admin_panel_settings,
+                        title: 'إدارة صلاحية رفع الكتب',
+                        onTap: () => _openUploadPermissionAdmin(context),
+                      ),
                     const SizedBox(height: 12),
                     _SettingsTile(
                       icon: Icons.reviews,
@@ -256,6 +283,48 @@ class ProfileScreen extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  Future<void> _openUploadPermissionAdmin(BuildContext context) async {
+    final auth = context.read<AuthFirebaseService>();
+    final email = auth.currentUser?.email ?? '';
+    if (email != 'a@b.com') return;
+    final uidController = TextEditingController();
+    bool grant = true;
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('منح/سحب صلاحية رفع الكتب'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: uidController,
+              decoration: const InputDecoration(labelText: 'UID المستخدم'),
+            ),
+            const SizedBox(height: 8),
+            Row(children: [
+              const Text('منح الصلاحية'),
+              const Spacer(),
+              Switch(value: grant, onChanged: (v) { grant = v; (ctx as Element).markNeedsBuild(); }),
+            ])
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('إلغاء')),
+          ElevatedButton(
+            onPressed: () async {
+              final uid = uidController.text.trim();
+              if (uid.isNotEmpty) {
+                await FirebaseFirestore.instance.collection('users').doc(uid).set({'canUploadBooks': grant}, SetOptions(merge: true));
+              }
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text('حفظ'),
+          )
+        ],
+      ),
     );
   }
 }

@@ -48,6 +48,7 @@ class AuthFirebaseService extends ChangeNotifier {
         'email': email,
         'displayName': name,
         'createdAt': FieldValue.serverTimestamp(),
+        'canUploadBooks': false,
       });
   print('[AuthFirebaseService] register success uid=${cred.user?.uid}');
       // إرسال بريد تحقق إن أمكن
@@ -118,6 +119,19 @@ class AuthFirebaseService extends ChangeNotifier {
       return null;
     } catch (e) {
       return 'تعذر تحديث الملف: $e';
+    }
+  }
+
+  /// فحص سريع لصلاحية رفع الكتب من Firestore
+  Future<bool> canCurrentUserUploadBooks() async {
+    final u = _auth.currentUser;
+    if (u == null) return false;
+    if ((u.email ?? '') == 'a@b.com') return true; // المشرف الافتراضي
+    try {
+      final doc = await _db.collection('users').doc(u.uid).get();
+      return doc.data()?['canUploadBooks'] == true;
+    } catch (_) {
+      return false;
     }
   }
 

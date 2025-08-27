@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 
 import '../services/book_service.dart';
+import '../utils/enhanced_design_tokens.dart';
 
 /// Safer EPUB reader: unzip EPUB, extract plain-text chapters with search and manual highlight saving.
 class EpubReaderWidget extends StatefulWidget {
@@ -30,6 +31,9 @@ class _EpubReaderWidgetState extends State<EpubReaderWidget> {
   double _fontSize = 16;
   bool _localDark = false; // وضع ليلي محلي مستقل عن الثيم العام
   final ScrollController _scroll = ScrollController();
+  bool _paperMode = true; // ورق أصفر
+  bool _sepiaMode = false; // وضع ورق أصفر كلاسيكي
+  bool _nightMode = false; // وضع ليلي محلي مستقل عن ثيم التطبيق
 
   @override
   void initState() {
@@ -219,7 +223,7 @@ class _EpubReaderWidgetState extends State<EpubReaderWidget> {
           .trim();
       if (text.isNotEmpty) {
         blocks.add(_Paragraph(text, ParagraphType.text));
-        print('فقرة نص مضافة: ${text.substring(0, text.length > 50 ? 50 : text.length)}...');
+        print('فقرة نص مadded: ${text.substring(0, text.length > 50 ? 50 : text.length)}...');
       }
     }
     
@@ -350,8 +354,12 @@ class _EpubReaderWidgetState extends State<EpubReaderWidget> {
     final paragraphs = current.paragraphs;
 
     final theme = Theme.of(context);
-    final bg = _localDark ? Colors.black : theme.scaffoldBackgroundColor;
-    final fg = _localDark ? Colors.white70 : theme.textTheme.bodyLarge?.color ?? Colors.black87;
+    final bg = _nightMode
+        ? Colors.black
+        : (_sepiaMode
+            ? EnhancedAppColors.paperYellow
+            : theme.scaffoldBackgroundColor);
+    final fg = _nightMode ? Colors.white70 : EnhancedAppColors.paperInk;
 
     List<Widget> widgets = [];
 
@@ -411,12 +419,24 @@ class _EpubReaderWidgetState extends State<EpubReaderWidget> {
         Expanded(
           child: Container(
             color: bg,
-            child: SingleChildScrollView(
-              controller: _scroll,
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: widgets,
+            child: GestureDetector(
+              onHorizontalDragEnd: (details) async {
+                final v = details.primaryVelocity ?? 0;
+                if (v < 0 && _index < _chapters.length - 1) {
+                  setState(() => _index++);
+                  await _savePageProgress();
+                } else if (v > 0 && _index > 0) {
+                  setState(() => _index--);
+                  await _savePageProgress();
+                }
+              },
+              child: SingleChildScrollView(
+                controller: _scroll,
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: widgets,
+                ),
               ),
             ),
           ),
@@ -456,7 +476,7 @@ class _EpubReaderWidgetState extends State<EpubReaderWidget> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
-        color: _localDark ? Colors.grey.shade900 : Colors.grey.shade100,
+        color: _paperMode ? EnhancedAppColors.paperYellow : (_localDark ? Colors.grey.shade900 : Colors.grey.shade100),
         border: Border(bottom: BorderSide(color: Colors.grey.withOpacity(.2))),
       ),
       child: Row(children: [
@@ -477,6 +497,9 @@ class _EpubReaderWidgetState extends State<EpubReaderWidget> {
         _iconBtn(Icons.add, () => setState(() => _fontSize = (_fontSize + 2).clamp(12, 40))),
         const SizedBox(width: 6),
         _iconBtn(_localDark ? Icons.dark_mode : Icons.light_mode, () => setState(() => _localDark = !_localDark)),
+        _iconBtn(Icons.style, () => setState(() => _paperMode = !_paperMode)),
+        _iconBtn(Icons.nights_stay, () => setState(() { _nightMode = !_nightMode; _sepiaMode = false; })),
+        _iconBtn(Icons.auto_awesome, () => setState(() { _sepiaMode = !_sepiaMode; _nightMode = false; })),
         _iconBtn(Icons.bookmark_add, _addHighlight),
       ]),
     );
