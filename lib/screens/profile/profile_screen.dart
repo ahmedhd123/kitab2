@@ -3,7 +3,10 @@ import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/auth_firebase_service.dart';
+import '../library/enhanced_library_screen.dart';
+import '../plans/enhanced_plans_screen.dart';
 import 'my_reviews_screen.dart';
+import '../../services/book_service.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -46,6 +49,7 @@ class ProfileScreen extends StatelessWidget {
             slivers: [
               SliverToBoxAdapter(
                 child: _HeaderCard(
+                  userId: user.uid,
                   name: displayName,
                   email: email,
                   photoURL: photoURL,
@@ -56,21 +60,21 @@ class ProfileScreen extends StatelessWidget {
                 ),
               ),
               SliverToBoxAdapter(child: const SizedBox(height: 12)),
-              // إحصاءات سريعة حيّة
-              SliverToBoxAdapter(
-                child: _LiveStatsRow(userId: user.uid),
-              ),
-              SliverToBoxAdapter(child: const SizedBox(height: 16)),
+              // تم نقل الإحصاءات الحية إلى داخل بطاقة الهيدر
               SliverToBoxAdapter(child: _QuickActions()),
               SliverToBoxAdapter(child: const SizedBox(height: 24)),
               // إعدادات/مساعدة
-      SliverPadding(
+              SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 sliver: SliverList(
                   delegate: SliverChildListDelegate.fixed([
-                    _SettingsTile(icon: Icons.settings, title: 'الإعدادات', onTap: () {}),
+                    _SettingsTile(icon: Icons.settings, title: 'الإعدادات', onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('قريباً...')));
+                    }),
                     const Divider(height: 0),
-        _SettingsTile(icon: Icons.help_outline, title: 'المساعدة', onTap: () {}),
+                    _SettingsTile(icon: Icons.help_outline, title: 'المساعدة', onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('قريباً...')));
+                    }),
                     const Divider(height: 0),
                     _SettingsTile(
                       icon: Icons.info_outline,
@@ -162,12 +166,12 @@ class ProfileScreen extends StatelessWidget {
         }
         return;
       }
-    final ext = (file.extension ?? '').toLowerCase();
-    final contentType = ext == 'png'
-      ? 'image/png'
-      : ext == 'webp'
-        ? 'image/webp'
-        : 'image/jpeg';
+      final ext = (file.extension ?? '').toLowerCase();
+      final contentType = ext == 'png'
+          ? 'image/png'
+          : ext == 'webp'
+              ? 'image/webp'
+              : 'image/jpeg';
       final err = await auth.uploadAvatarBytes(bytes, contentType: contentType);
       if (context.mounted) {
         if (err == null) {
@@ -187,10 +191,10 @@ class ProfileScreen extends StatelessWidget {
     final user = auth.currentUser;
     if (user == null) return;
 
-  final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-  final data = doc.data() ?? {};
-  final nameController = TextEditingController(text: (data['displayName'] as String?) ?? (user.displayName ?? ''));
-  final bioController = TextEditingController(text: data['bio'] as String? ?? '');
+    final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+    final data = doc.data() ?? {};
+    final nameController = TextEditingController(text: (data['displayName'] as String?) ?? (user.displayName ?? ''));
+    final bioController = TextEditingController(text: data['bio'] as String? ?? '');
     final formKey = GlobalKey<FormState>();
 
     // ignore: use_build_context_synchronously
@@ -257,6 +261,7 @@ class ProfileScreen extends StatelessWidget {
 }
 
 class _HeaderCard extends StatelessWidget {
+  final String userId;
   final String name;
   final String email;
   final String? photoURL;
@@ -266,6 +271,7 @@ class _HeaderCard extends StatelessWidget {
   final Future<void> Function() onVerifyEmail;
 
   const _HeaderCard({
+    required this.userId,
     required this.name,
     required this.email,
     required this.photoURL,
@@ -337,6 +343,9 @@ class _HeaderCard extends StatelessWidget {
                 ]),
               ),
             ],
+            const SizedBox(height: 12),
+            // إحصاءات المجتمع فوق وفي نفس الهيدر
+            _LiveStatsRow(userId: userId),
           ],
         ),
       ),
@@ -354,10 +363,19 @@ class _LiveStatsRow extends StatelessWidget {
     final plans$ = db.collection('reading_plans').where('userId', isEqualTo: userId).snapshots();
     final lists$ = db.collection('reading_lists').where('userId', isEqualTo: userId).snapshots();
     final reviews$ = db.collection('reviews').where('userId', isEqualTo: userId).snapshots();
+
+    final svc = context.watch<BookService>();
+    final readingCount = svc.getReadingBooks(userId).length;
+    final completedCount = svc.getCompletedBooks(userId).length;
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 0),
       child: Row(
         children: [
+          Expanded(child: _StaticCountCard(count: readingCount, label: 'قيد القراءة', icon: Icons.menu_book, color: Colors.teal)),
+          const SizedBox(width: 8),
+          Expanded(child: _StaticCountCard(count: completedCount, label: 'مكتملة', icon: Icons.task_alt, color: Colors.green)),
+          const SizedBox(width: 8),
           Expanded(child: _CountCard(stream: plans$, label: 'الخطط', icon: Icons.flag_rounded, color: Colors.teal)),
           const SizedBox(width: 8),
           Expanded(child: _CountCard(stream: lists$, label: 'القوائم', icon: Icons.list_alt_rounded, color: Colors.indigo)),
@@ -414,6 +432,39 @@ class _CountCard extends StatelessWidget {
   }
 }
 
+class _StaticCountCard extends StatelessWidget {
+  final int count;
+  final String label;
+  final IconData icon;
+  final Color color;
+  const _StaticCountCard({required this.count, required this.label, required this.icon, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: color.withOpacity(0.08),
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(12)),
+              child: Icon(icon, color: Colors.white),
+            ),
+            const SizedBox(width: 12),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w700)),
+              Text('$count عنصر', style: Theme.of(context).textTheme.bodySmall),
+            ])
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _QuickActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -427,7 +478,10 @@ class _QuickActions extends StatelessWidget {
               color: cs.primary,
               icon: Icons.flag_rounded,
               label: 'إنشاء خطة',
-              onTap: () => Navigator.pushNamed(context, '/plans'),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const EnhancedPlansScreen()),
+              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -436,7 +490,10 @@ class _QuickActions extends StatelessWidget {
               color: cs.secondary,
               icon: Icons.list_alt_rounded,
               label: 'قوائم القراءة',
-              onTap: () => Navigator.pushNamed(context, '/plans'),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const EnhancedLibraryScreen()),
+              ),
             ),
           ),
         ],

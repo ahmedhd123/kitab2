@@ -219,9 +219,9 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
       );
     }
 
-  final bookService = Provider.of<BookService>(context);
-  final auth = Provider.of<AuthFirebaseService>(context, listen: false);
-  final conflict = auth.currentUser != null ? bookService.getConflict(widget.book!.id, auth.currentUser!.uid) : null;
+    final bookService = Provider.of<BookService>(context);
+    final auth = Provider.of<AuthFirebaseService>(context, listen: false);
+    final conflict = auth.currentUser != null ? bookService.getConflict(widget.book!.id, auth.currentUser!.uid) : null;
 
     return Scaffold(
       appBar: AppBar(
@@ -271,68 +271,74 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _localFilePath == null
-              ? const Center(child: Text('فشل في تحميل الكتاب'))
-              : Column(children: [
-                  if (conflict != null)
-                    MaterialBanner(
-                      content: const Text('تم العثور على تعارض بين تقدم القراءة المحلي والسحابي.'),
-                      actions: [
-                        TextButton(
-                          onPressed: () async {
-                            // choose remote
-                            try {
-                              final remote = conflict['remote']!;
-                              await bookService.syncReadingProgressFromRemote(widget.book!.id, auth.currentUser!.uid);
-                              // apply remote
-                              setState(() {
-                                _currentPage = remote.currentPage;
-                                _totalPages = remote.totalPages;
-                                _progress = remote.progressPercentage;
-                              });
-                            } catch (_) {}
-                          },
-                          child: const Text('اعتمد النسخة السحابية'),
-                        ),
-                        TextButton(
-                          onPressed: () async {
-                            // choose local (re-upload)
-                            try {
-                              final local = conflict['local']!;
-                              await bookService.updateReadingProgress(
-                                bookId: local.bookId,
-                                userId: local.userId,
-                                currentPage: local.currentPage,
-                                totalPages: local.totalPages,
-                                additionalReadingTime: local.readingTime,
-                                bookmarks: local.bookmarks,
-                                highlights: local.highlights,
-                              );
-                              bookService.clearConflict(widget.book!.id, auth.currentUser!.uid);
-                            } catch (_) {}
-                          },
-                          child: const Text('اعتمد النسخة المحلية'),
-                        ),
-                        TextButton(
-                          onPressed: () async {
-                            // automatic merge: already stored in syncReadingProgressFromRemote previously, so just clear
-                            bookService.clearConflict(widget.book!.id, auth.currentUser!.uid);
-                          },
-                          child: const Text('دمج تلقائي'),
-                        ),
-                      ],
+          : Column(children: [
+              if (conflict != null)
+                MaterialBanner(
+                  content: const Text('تم العثور على تعارض بين تقدم القراءة المحلي والسحابي.'),
+                  actions: [
+                    TextButton(
+                      onPressed: () async {
+                        // choose remote
+                        try {
+                          final remote = conflict['remote']!;
+                          await bookService.syncReadingProgressFromRemote(widget.book!.id, auth.currentUser!.uid);
+                          // apply remote
+                          setState(() {
+                            _currentPage = remote.currentPage;
+                            _totalPages = remote.totalPages;
+                            _progress = remote.progressPercentage;
+                          });
+                        } catch (_) {}
+                      },
+                      child: const Text('اعتمد النسخة السحابية'),
                     ),
-                  Expanded(child: _buildReader()),
-                ]),
-      bottomNavigationBar: _localFilePath != null ? _buildBottomControls() : null,
+                    TextButton(
+                      onPressed: () async {
+                        // choose local (re-upload)
+                        try {
+                          final local = conflict['local']!;
+                          await bookService.updateReadingProgress(
+                            bookId: local.bookId,
+                            userId: local.userId,
+                            currentPage: local.currentPage,
+                            totalPages: local.totalPages,
+                            additionalReadingTime: local.readingTime,
+                            bookmarks: local.bookmarks,
+                            highlights: local.highlights,
+                          );
+                          bookService.clearConflict(widget.book!.id, auth.currentUser!.uid);
+                        } catch (_) {}
+                      },
+                      child: const Text('اعتمد النسخة المحلية'),
+                    ),
+                    TextButton(
+                      onPressed: () async {
+                        // automatic merge: already stored in syncReadingProgressFromRemote previously, so just clear
+                        bookService.clearConflict(widget.book!.id, auth.currentUser!.uid);
+                      },
+                      child: const Text('دمج تلقائي'),
+                    ),
+                  ],
+                ),
+              Expanded(child: _buildReader()),
+            ]),
+      bottomNavigationBar: _shouldShowPdfControls() ? _buildBottomControls() : null,
     );
   }
 
+  bool _shouldShowPdfControls() {
+    final ext = widget.book!.fileType.toLowerCase();
+    return !kIsWeb && ext == 'pdf' && _localFilePath != null;
+  }
+
   Widget _buildReader() {
-  final ext = widget.book!.fileType.toLowerCase();
-  if (ext == 'pdf') return _buildPDFReader();
-  if (ext == 'epub') return _buildEPUBReader();
-    // المنصات الأخرى: الاستمرار باستخدام flutter_pdfview
+    final ext = widget.book!.fileType.toLowerCase();
+    if (ext == 'pdf') return _buildPDFReader();
+    if (ext == 'epub') return _buildEPUBReader();
+    // fallback PDF renderer (requires local path)
+    if (_localFilePath == null) {
+      return const Center(child: Text('تعذر تحميل الملف'));
+    }
     return PDFView(
       filePath: _localFilePath!,
       enableSwipe: true,
@@ -362,7 +368,6 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
   Widget _buildPDFReader() {
     if (kIsWeb) {
       final pdfUrl = _localFilePath ?? widget.book!.fileUrl;
-      // استخدام PDF.js العام (يمكن استضافته لاحقاً محلياً). نمرر رابط الملف في المعلمة file.
       final viewerUrl = Uri.encodeFull('https://mozilla.github.io/pdf.js/web/viewer.html?file=$pdfUrl');
       return Container(
         color: Colors.black,
@@ -371,7 +376,10 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
         ),
       );
     }
-  return PdfReaderWidget(book: widget.book!, localFilePath: _localFilePath!);
+    if (_localFilePath == null) {
+      return const Center(child: Text('تعذر تحميل ملف PDF'));
+    }
+    return PdfReaderWidget(book: widget.book!, localFilePath: _localFilePath!);
   }
 
   // تسجيل IFrameView لعرض PDF عبر PDF.js (ويب فقط)

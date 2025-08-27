@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:pdfx/pdfx.dart'; // لحساب عدد صفحات PDF بدقة
+import '../../utils/pdf_page_counter.dart';
 
 import '../../models/book_model.dart';
 import '../../services/book_service.dart';
@@ -52,14 +52,12 @@ class _UploadBookScreenState extends State<UploadBookScreen> {
   Future<void> _refinePdfPageCount() async {
     if (_fileBytes == null || _fileType != 'pdf') return;
     try {
-      final doc = await PdfDocument.openData(_fileBytes!);
-      final realPages = doc.pagesCount;
+      final realPages = await countPdfPages(_fileBytes!);
       if (realPages > 0 && realPages != _estimatedPages) {
         setState(() => _estimatedPages = realPages);
       }
-      await doc.close();
     } catch (e) {
-      // تجاهل الخطأ ونبقى على التقدير التقريبي
+      // تجاهل
     }
   }
 
