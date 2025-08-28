@@ -7,6 +7,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_storage/firebase_storage.dart' as firebase_storage;
+import 'package:flutter/services.dart';
 // ignore: avoid_web_libraries_in_flutter
 // استبدلنا فتح التبويب المخصص بعرض مدمج PDF.js
 // نستخدم platformViewRegistry لتسجيل iframe للويب
@@ -40,6 +41,7 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
   late DateTime _readingStartTime;
   // تمت إزالة دعم Syncfusion مؤقتاً بسبب تعارض الإصدارات مع intl
   // PdfViewerController _pdfController = PdfViewerController(); // معطل حالياً
+  bool _immersiveUI = false; // واجهة غامرة: إخفاء AppBar والعناصر الجانبية
 
   @override
   void initState() {
@@ -52,6 +54,8 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
         _loadRemoteReadingProgress();
       });
     }
+    // تفعيل نمط الواجهة الغامرة للنظام
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   }
 
   Future<void> _loadRemoteReadingProgress() async {
@@ -211,6 +215,8 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
 
   @override
   void dispose() {
+    // إعادة واجهة النظام
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     // save final progress before disposing
     try {
       if (widget.book != null) {
@@ -235,6 +241,10 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
     super.dispose();
   }
 
+  void _toggleImmersive() {
+    setState(() => _immersiveUI = !_immersiveUI);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.book == null) {
@@ -250,106 +260,113 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
     final auth = Provider.of<AuthFirebaseService>(context, listen: false);
     final conflict = auth.currentUser != null ? bookService.getConflict(widget.book!.id, auth.currentUser!.uid) : null;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          widget.book!.title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        actions: [
-          // sync indicator
-          Builder(builder: (ctx) {
-            final svc = Provider.of<BookService>(ctx);
-            final auth = Provider.of<AuthFirebaseService>(ctx, listen: false);
-            final status = auth.currentUser != null ? svc.getSyncStatus(widget.book!.id, auth.currentUser!.uid) : 'idle';
-            final color = status == 'syncing' ? Colors.orangeAccent : (status == 'success' ? Colors.greenAccent : (status == 'failed' ? Colors.redAccent : Colors.white));
-            return IconButton(
-              tooltip: 'Sync status: $status',
-              icon: Icon(Icons.sync, color: color),
-              onPressed: () {
-                ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('حالة المزامنة: $status')));
-              },
-            );
-          }),
-          IconButton(
-            icon: const Icon(Icons.bookmark_outline),
-            onPressed: () {
-              // TODO: إضافة علامة مرجعية
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () {
-              _showReaderSettings();
-            },
-          ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(6),
-          child: LinearProgressIndicator(
-            value: _progress,
-            backgroundColor: Colors.grey[300],
-            valueColor: AlwaysStoppedAnimation<Color>(
-              Theme.of(context).primaryColor,
-            ),
-          ),
-        ),
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(children: [
-              if (conflict != null)
-                MaterialBanner(
-                  content: const Text('تم العثور على تعارض بين تقدم القراءة المحلي والسحابي.'),
-                  actions: [
-                    TextButton(
-                      onPressed: () async {
-                        // choose remote
-                        try {
-                          final remote = conflict['remote']!;
-                          await bookService.syncReadingProgressFromRemote(widget.book!.id, auth.currentUser!.uid);
-                          // apply remote
-                          setState(() {
-                            _currentPage = remote.currentPage;
-                            _totalPages = remote.totalPages;
-                            _progress = remote.progressPercentage;
-                          });
-                        } catch (_) {}
-                      },
-                      child: const Text('اعتمد النسخة السحابية'),
-                    ),
-                    TextButton(
-                      onPressed: () async {
-                        // choose local (re-upload)
-                        try {
-                          final local = conflict['local']!;
-                          await bookService.updateReadingProgress(
-                            bookId: local.bookId,
-                            userId: local.userId,
-                            currentPage: local.currentPage,
-                            totalPages: local.totalPages,
-                            additionalReadingTime: local.readingTime,
-                            bookmarks: local.bookmarks,
-                            highlights: local.highlights,
-                          );
-                          bookService.clearConflict(widget.book!.id, auth.currentUser!.uid);
-                        } catch (_) {}
-                      },
-                      child: const Text('اعتمد النسخة المحلية'),
-                    ),
-                    TextButton(
-                      onPressed: () async {
-                        // automatic merge: already stored in syncReadingProgressFromRemote previously, so just clear
-                        bookService.clearConflict(widget.book!.id, auth.currentUser!.uid);
-                      },
-                      child: const Text('دمج تلقائي'),
-                    ),
-                  ],
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _toggleImmersive, // النقر يبدّل إظهار/إخفاء الواجهة
+      child: Scaffold(
+        extendBodyBehindAppBar: true,
+        appBar: _immersiveUI
+            ? null
+            : AppBar(
+                title: Text(
+                  widget.book!.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              Expanded(child: _buildReader()),
-            ]),
-      bottomNavigationBar: _shouldShowPdfControls() ? _buildBottomControls() : null,
+                actions: [
+                  // sync indicator
+                  Builder(builder: (ctx) {
+                    final svc = Provider.of<BookService>(ctx);
+                    final auth = Provider.of<AuthFirebaseService>(ctx, listen: false);
+                    final status = auth.currentUser != null ? svc.getSyncStatus(widget.book!.id, auth.currentUser!.uid) : 'idle';
+                    final color = status == 'syncing' ? Colors.orangeAccent : (status == 'success' ? Colors.greenAccent : (status == 'failed' ? Colors.redAccent : Colors.white));
+                    return IconButton(
+                      tooltip: 'Sync status: $status',
+                      icon: Icon(Icons.sync, color: color),
+                      onPressed: () {
+                        ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('حالة المزامنة: $status')));
+                      },
+                    );
+                  }),
+                  IconButton(
+                    icon: const Icon(Icons.bookmark_outline),
+                    onPressed: () {
+                      // TODO: إضافة علامة مرجعية
+                    },
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.settings),
+                    onPressed: () {
+                      _showReaderSettings();
+                    },
+                  ),
+                ],
+                bottom: PreferredSize(
+                  preferredSize: const Size.fromHeight(6),
+                  child: LinearProgressIndicator(
+                    value: _progress,
+                    backgroundColor: Colors.grey[300],
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      Theme.of(context).primaryColor,
+                    ),
+                  ),
+                ),
+              ),
+        body: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : Column(children: [
+                if (conflict != null && !_immersiveUI)
+                  MaterialBanner(
+                    content: const Text('تم العثور على تعارض بين تقدم القراءة المحلي والسحابي.'),
+                    actions: [
+                      TextButton(
+                        onPressed: () async {
+                          // choose remote
+                          try {
+                            final remote = conflict['remote']!;
+                            await bookService.syncReadingProgressFromRemote(widget.book!.id, auth.currentUser!.uid);
+                            // apply remote
+                            setState(() {
+                              _currentPage = remote.currentPage;
+                              _totalPages = remote.totalPages;
+                              _progress = remote.progressPercentage;
+                            });
+                          } catch (_) {}
+                        },
+                        child: const Text('اعتمد النسخة السحابية'),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          // choose local (re-upload)
+                          try {
+                            final local = conflict['local']!;
+                            await bookService.updateReadingProgress(
+                              bookId: local.bookId,
+                              userId: local.userId,
+                              currentPage: local.currentPage,
+                              totalPages: local.totalPages,
+                              additionalReadingTime: local.readingTime,
+                              bookmarks: local.bookmarks,
+                              highlights: local.highlights,
+                            );
+                            bookService.clearConflict(widget.book!.id, auth.currentUser!.uid);
+                          } catch (_) {}
+                        },
+                        child: const Text('اعتمد النسخة المحلية'),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          // automatic merge: already stored in syncReadingProgressFromRemote previously, so just clear
+                          bookService.clearConflict(widget.book!.id, auth.currentUser!.uid);
+                        },
+                        child: const Text('دمج تلقائي'),
+                      ),
+                    ],
+                  ),
+                Expanded(child: _buildReader()),
+              ]),
+        bottomNavigationBar: _shouldShowPdfControls() && !_immersiveUI ? _buildBottomControls() : null,
+      ),
     );
   }
 
@@ -436,38 +453,52 @@ class _BookReaderScreenState extends State<BookReaderScreen> {
   }
 
   Widget _buildBottomControls() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).scaffoldBackgroundColor,
-        border: Border(
-          top: BorderSide(
-            color: Colors.grey[300]!,
-            width: 1,
+    return Semantics(
+      container: true,
+      label: 'شريط التحكم في صفحات الكتاب',
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          border: Border(
+            top: BorderSide(
+              color: Colors.grey[300]!,
+              width: 1,
+            ),
           ),
         ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // الصفحة السابقة
-          IconButton(
-            icon: const Icon(Icons.chevron_right),
-            onPressed: _currentPage > 1 ? _previousPage : null,
-          ),
-          
-          // معلومات الصفحة
-          Text(
-            '$_currentPage من $_totalPages',
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          
-          // الصفحة التالية
-          IconButton(
-            icon: const Icon(Icons.chevron_left),
-            onPressed: _currentPage < _totalPages ? _nextPage : null,
-          ),
-        ],
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            // الصفحة السابقة
+            Semantics(
+              button: true,
+              enabled: _currentPage > 1,
+              label: 'الانتقال إلى الصفحة السابقة',
+              child: IconButton(
+                icon: const Icon(Icons.chevron_right),
+                onPressed: _currentPage > 1 ? _previousPage : null,
+              ),
+            ),
+            
+            // معلومات الصفحة
+            Text(
+              '$_currentPage من $_totalPages',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            
+            // الصفحة التالية
+            Semantics(
+              button: true,
+              enabled: _currentPage < _totalPages,
+              label: 'الانتقال إلى الصفحة التالية',
+              child: IconButton(
+                icon: const Icon(Icons.chevron_left),
+                onPressed: _currentPage < _totalPages ? _nextPage : null,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

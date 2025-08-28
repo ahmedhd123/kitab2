@@ -103,36 +103,28 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
         actions: [
           Consumer<AuthFirebaseService>(
             builder: (context, auth, _) {
-              final uid = auth.currentUser?.uid;
-              if (uid == null) return const SizedBox.shrink();
-              final email = auth.currentUser?.email ?? '';
-              return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
-                builder: (context, snap) {
-                  final isOwner = uid == widget.book.uploadedBy;
-                  final can = (email == 'a@b.com') || (snap.data?.data()?['canUploadBooks'] == true);
-                  if (!isOwner && !can) return const SizedBox.shrink();
-                  return IconButton(
-                    tooltip: 'تعديل/حذف',
-                    icon: const Icon(Icons.edit_note, color: Colors.white),
-                    onPressed: _showEditMenu,
-                  );
-                },
+              final isOwner = auth.currentUser?.uid == widget.book.uploadedBy;
+              if (!isOwner) return const SizedBox.shrink();
+              return IconButton(
+                tooltip: 'تعديل/حذف',
+                icon: const Icon(Icons.edit_note, color: Colors.white),
+                onPressed: _showEditMenu,
               );
             },
           ),
-          Consumer<BookService>(
-            builder: (context, service, _) {
+          Consumer2<BookService, AuthFirebaseService>(
+            builder: (context, service, auth, _) {
               final saved = service.isBookSaved(widget.book.id);
+              final uid = auth.currentUser?.uid;
               return IconButton(
                 tooltip: saved ? 'إزالة من المحفوظات' : 'حفظ',
                 icon: Icon(saved ? Icons.bookmark : Icons.bookmark_outline, color: saved ? Colors.amber : Colors.white),
                 onPressed: () {
                   if (saved) {
-                    service.unsaveBook(widget.book.id);
+                    service.unsaveBook(widget.book.id, userId: uid);
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم إزالة الكتاب من المحفوظات')));
                   } else {
-                    service.saveBook(widget.book.id);
+                    service.saveBook(widget.book.id, userId: uid);
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حفظ الكتاب')));
                   }
                 },
@@ -501,161 +493,37 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (ctx) {
-        final titleController = TextEditingController(text: widget.book.title);
-        final descController = TextEditingController(text: widget.book.description);
-        final summaryController = TextEditingController(text: widget.book.bookSummary);
-        final authorBioController = TextEditingController(text: widget.book.authorBio);
-        DateTime? releaseDate = widget.book.releaseDate;
-        bool saving = false;
-        Uint8List? newCoverBytes;
-        String? newCoverName;
-        return StatefulBuilder(builder: (c, setModal) {
-          return Padding(
-            padding: EdgeInsets.only(bottom: MediaQuery.of(c).viewInsets.bottom),
-            child: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
-                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Center(child: Container(width: 50, height: 5, margin: const EdgeInsets.only(bottom: 16), decoration: BoxDecoration(color: Colors.grey[400], borderRadius: BorderRadius.circular(4)))),
-                  Text('تعديل الكتاب', style: Theme.of(c).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 20),
-                  Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: SizedBox(
-                        width: 80,
-                        height: 110,
-                        child: newCoverBytes != null
-                            ? Image.memory(newCoverBytes!, fit: BoxFit.cover)
-                            : (widget.book.coverImageUrl.isNotEmpty
-                                ? SafeImage(assetPath: widget.book.coverImageUrl, fit: BoxFit.cover)
-                                : Container(color: Colors.grey.shade200, child: const Icon(Icons.image, size: 32, color: Colors.grey))),
-                      ),
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: const [
+              SizedBox(height: 8),
+              Center(
+                child: SizedBox(
+                  width: 50,
+                  height: 5,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Colors.grey,
+                      borderRadius: BorderRadius.all(Radius.circular(4)),
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text('الغلاف', style: Theme.of(c).textTheme.labelLarge),
-                        const SizedBox(height: 6),
-                        OutlinedButton.icon(
-                          onPressed: saving
-                              ? null
-                              : () async {
-                                  try {
-                                    final res = await FilePicker.platform.pickFiles(
-                                      withData: true,
-                                      type: FileType.custom,
-                                      allowedExtensions: ['jpg', 'jpeg', 'png']
-                                    );
-                                    if (res != null && res.files.isNotEmpty) {
-                                      final f = res.files.first;
-                                      setModal(() {
-                                        newCoverBytes = f.bytes;
-                                        newCoverName = f.name;
-                                      });
-                                    }
-                                  } catch (e) {
-                                    if (context.mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('فشل اختيار الصورة: $e')));
-                                    }
-                                  }
-                                },
-                          icon: const Icon(Icons.image_outlined),
-                          label: Text(newCoverName ?? 'تغيير الغلاف'),
-                        ),
-                        if (newCoverBytes != null)
-                          TextButton.icon(
-                            onPressed: saving
-                                ? null
-                                : () => setModal(() {
-                                      newCoverBytes = null;
-                                      newCoverName = null;
-                                    }),
-                            icon: const Icon(Icons.close),
-                            label: const Text('إزالة الجديد'),
-                          ),
-                      ]),
-                    )
-                  ]),
-                  const SizedBox(height: 16),
-                  TextField(controller: titleController, decoration: const InputDecoration(labelText: 'العنوان')), const SizedBox(height: 12),
-                  TextField(controller: descController, maxLines: 3, decoration: const InputDecoration(labelText: 'الوصف')), const SizedBox(height: 12),
-                  TextField(controller: summaryController, maxLines: 3, decoration: const InputDecoration(labelText: 'نبذة الكتاب')), const SizedBox(height: 12),
-                  TextField(controller: authorBioController, maxLines: 3, decoration: const InputDecoration(labelText: 'نبذة المؤلف')), const SizedBox(height: 12),
-                  Row(children: [
-                    Expanded(child: Text(releaseDate != null ? 'الإصدار: ${_formatDate(releaseDate!)}' : 'لا يوجد تاريخ إصدار')),
-                    TextButton.icon(onPressed: () async { final picked = await showDatePicker(context: c, initialDate: releaseDate ?? DateTime.now(), firstDate: DateTime(1800), lastDate: DateTime(2100)); if (picked != null) setModal(() => releaseDate = picked); }, icon: const Icon(Icons.event), label: const Text('اختيار')),
-                  ]),
-                  const SizedBox(height: 24),
-                  Row(children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        icon: saving ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.save),
-                        label: const Text('حفظ التعديلات'),
-                        onPressed: saving ? null : () async {
-                          setModal(() => saving = true);
-                          try {
-                            final svc = Provider.of<BookService>(context, listen: false);
-                            final updated = widget.book.copyWith(
-                              title: titleController.text.trim(),
-                              description: descController.text.trim(),
-                              bookSummary: summaryController.text.trim(),
-                              authorBio: authorBioController.text.trim(),
-                              releaseDate: releaseDate,
-                              updatedAt: DateTime.now(),
-                            );
-                            List<int>? coverBytes;
-                            String? coverType;
-                            if (newCoverBytes != null && newCoverBytes!.isNotEmpty) {
-                              coverBytes = newCoverBytes!.toList();
-                              final lower = (newCoverName ?? '').toLowerCase();
-                              coverType = lower.endsWith('.png') ? 'image/png' : 'image/jpeg';
-                            }
-                            await svc.updateBook(
-                              updated,
-                              coverImageBytes: coverBytes,
-                              coverImageContentType: coverType,
-                            );
-                            if (mounted) {
-                              Navigator.pop(c);
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم تحديث الكتاب')));
-                            }
-                          } catch (_) {
-                            if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('فشل في التحديث')));
-                          } finally {
-                            if (mounted) setModal(() => saving = false);
-                          }
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    IconButton(
-                      icon: const Icon(Icons.delete_forever, color: Colors.redAccent),
-                      tooltip: 'حذف الكتاب',
-                      onPressed: saving ? null : () async {
-                        final confirm = await showDialog<bool>(context: context, builder: (_) => AlertDialog(title: const Text('تأكيد الحذف'), content: const Text('هل تريد حذف الكتاب؟ لا يمكن التراجع.'), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('إلغاء')), ElevatedButton(style: ElevatedButton.styleFrom(backgroundColor: Colors.red), onPressed: () => Navigator.pop(context, true), child: const Text('حذف'))]));
-                        if (confirm == true) {
-                          try {
-                            final svc = Provider.of<BookService>(context, listen: false);
-                            await svc.deleteBook(widget.book.id);
-                            if (mounted) {
-                              Navigator.pop(c);
-                              Navigator.pop(context);
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حذف الكتاب')));
-                            }
-                          } catch (_) {
-                            if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('فشل في حذف الكتاب')));
-                          }
-                        }
-                      },
-                    ),
-                  ]),
-                ]),
+                  ),
+                ),
               ),
-            );
-        });
+              SizedBox(height: 16),
+              Text('تعديل الكتاب', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+              SizedBox(height: 12),
+              Text('ميزة تعديل بيانات الكتاب ستتوفر قريباً.'),
+              SizedBox(height: 12),
+            ],
+          ),
+        );
       },
     );
   }
@@ -768,6 +636,7 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
           builder: (context, service, auth, _) {
             final progress = service.getReadingProgress(widget.book.id, auth.currentUser?.uid ?? '');
             final saved = service.isBookSaved(widget.book.id);
+            final uid = auth.currentUser?.uid;
             return Row(children: [
               Expanded(
                 child: ElevatedButton.icon(
@@ -781,10 +650,10 @@ class _BookDetailsScreenState extends State<BookDetailsScreen> {
                 child: OutlinedButton.icon(
                   onPressed: () {
                     if (saved) {
-                      service.unsaveBook(widget.book.id);
+                      service.unsaveBook(widget.book.id, userId: uid);
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم الإزالة من المحفوظات')));
                     } else {
-                      service.saveBook(widget.book.id);
+                      service.saveBook(widget.book.id, userId: uid);
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('تم حفظ الكتاب')));
                     }
                   },

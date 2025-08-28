@@ -20,15 +20,203 @@ class BookService extends ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   bool _initialRemoteTried = false; // لمنع التكرار غير الضروري
+  String? _lastMissingIndexUrl; // رابط إنشاء الفهرس عند فشل الاستعلام
+
+  /// تخزين نتائج الصفحات بحسب مفتاح (category|orderBy|dir)
+  final Map<String, List<BookModel>> _pagedResults = {};
+  final Map<String, DocumentSnapshot<Map<String, dynamic>>?> _pageCursors = {};
+  final Map<String, bool> _hasMoreMap = {};
+  final Map<String, int> _localOffsets = {};
+  // تجميع وتأجيل الكتابة للسحابة لتخفيف الحمل
+  final Map<String, DateTime> _lastRemoteWrite = {};
+  final Map<String, Duration> _pendingReadingTime = {};
+  final Duration _remoteWriteDebounce = const Duration(seconds: 10);
 
   // Getters
   List<BookModel> get books => List.unmodifiable(_books);
   List<BookModel> get featuredBooks => _books.take(6).toList();
   List<BookModel> get recentBooks => _books.take(10).toList();
   List<ReadingProgressModel> get readingProgress => List.unmodifiable(_readingProgress);
+  // الحصول على الكتب المحفوظة محلياً (قائمة المعرفات)
   List<String> get savedBooks => List.unmodifiable(_savedBooks);
   bool get isLoading => _isLoading;
   String? get error => _error;
+  String? get lastMissingIndexUrl => _lastMissingIndexUrl;
+  // مؤشر مبسط لعرض Banner للفهرس المفقود
+  bool get hasIndexHint => _lastMissingIndexUrl != null;
+
+  void clearIndexHint() {
+    _lastMissingIndexUrl = null;
+    notifyListeners();
+  }
+
+  /// مسح رسالة الخطأ بعد عرضها للمستخدم
+  void clearError() {
+    _error = null;
+    notifyListeners();
+  }
+
+  /// إرجاع النتائج المجمعة للصفحات حسب المفتاح
+  List<BookModel> getPagedBooks({String? category, String orderBy = 'createdAt', bool descending = true}) {
+    return _pagedResults[_pageKey(category: category, orderBy: orderBy, descending: descending)] ?? const [];
+  }
+
+  /// هل هناك مزيد من الصفحات؟
+  bool hasMorePaged({String? category, String orderBy = 'createdAt', bool descending = true}) {
+    return _hasMoreMap[_pageKey(category: category, orderBy: orderBy, descending: descending)] ?? false;
+  }
+
+  String _pageKey({String? category, String orderBy = 'createdAt', bool descending = true})
+    => '${category ?? 'الكل'}|$orderBy|${descending ? 'desc' : 'asc'}';
+
+  /// تحميل الصفحة الأولى من الكتب مع خيارات التصفية والفرز
+  Future<List<BookModel>> loadFirstBooksPage({
+    String? category,
+    String orderBy = 'createdAt', // createdAt | averageRating | downloadCount
+    bool descending = true,
+    int limit = 20,
+  }) async {
+    final key = _pageKey(category: category, orderBy: orderBy, descending: descending);
+    _pagedResults.remove(key);
+    _pageCursors.remove(key);
+    _hasMoreMap[key] = false;
+    _localOffsets[key] = 0;
+
+    // عند توفر المستودع: استخدم Firestore مع startAfterDocument
+    if (_repository != null) {
+      try {
+        _setLoading(true);
+        final page = await _repository!.fetchBooksPage(
+          category: category,
+          orderBy: orderBy,
+          descending: descending,
+          limit: limit,
+        );
+        _pagedResults[key] = page.items;
+        _pageCursors[key] = page.lastDoc;
+        _hasMoreMap[key] = page.items.length == limit && page.lastDoc != null;
+        _lastMissingIndexUrl = null; // نجاح => لا رابط مفقود
+        notifyListeners();
+        return _pagedResults[key]!;
+      } on FirebaseException catch (e) {
+        // ملاحظة: قد يتطلب الأمر فهرس مركب عند الجمع بين where+orderBy
+        _lastMissingIndexUrl = _extractIndexUrl(e.message);
+        _setError('فشل في تحميل الصفحة الأولى${_lastMissingIndexUrl != null ? ': يتطلب الاستعلام فهرسًا مركبًا' : ''}');
+        return const [];
+      } catch (e) {
+        _setError('فشل في تحميل الصفحة الأولى');
+        return const [];
+      } finally {
+        _setLoading(false);
+      }
+    }
+
+    // Fallback محلي بدون مستودع
+    final list = _buildLocallyFilteredSorted(category, orderBy, descending);
+    final slice = list.take(limit).toList();
+    _pagedResults[key] = slice;
+    _localOffsets[key] = slice.length;
+    _hasMoreMap[key] = _localOffsets[key]! < list.length;
+    notifyListeners();
+    return slice;
+  }
+
+  /// تحميل الصفحة التالية بناءً على آخر مؤشر
+  Future<List<BookModel>> loadNextBooksPage({
+    String? category,
+    String orderBy = 'createdAt',
+    bool descending = true,
+    int limit = 20,
+  }) async {
+    final key = _pageKey(category: category, orderBy: orderBy, descending: descending);
+
+    if (_repository != null) {
+      final cursor = _pageCursors[key];
+      if (cursor == null) {
+        // لا يوجد مؤشر => لا مزيد
+        _hasMoreMap[key] = false;
+        return const [];
+      }
+      try {
+        _setLoading(true);
+        final page = await _repository!.fetchBooksPage(
+          category: category,
+          orderBy: orderBy,
+          descending: descending,
+          limit: limit,
+          startAfter: cursor,
+        );
+        final current = _pagedResults[key] ?? <BookModel>[];
+        // منع التكرار بالمعرف
+        final existingIds = current.map((b) => b.id).toSet();
+        for (final b in page.items) {
+          if (!existingIds.contains(b.id)) current.add(b);
+        }
+        _pagedResults[key] = current;
+        _pageCursors[key] = page.lastDoc;
+        _hasMoreMap[key] = page.items.length == limit && page.lastDoc != null;
+        _lastMissingIndexUrl = null; // نجاح => لا رابط مفقود
+        notifyListeners();
+        return page.items;
+      } on FirebaseException catch (e) {
+        _lastMissingIndexUrl = _extractIndexUrl(e.message);
+        _setError('فشل في تحميل الصفحة التالية${_lastMissingIndexUrl != null ? ': يتطلب الاستعلام فهرسًا مركبًا' : ''}');
+        return const [];
+      } catch (_) {
+        _setError('فشل في تحميل الصفحة التالية');
+        return const [];
+      } finally {
+        _setLoading(false);
+      }
+    }
+
+    // Fallback محلي
+    final list = _buildLocallyFilteredSorted(category, orderBy, descending);
+    final offset = _localOffsets[key] ?? 0;
+    if (offset >= list.length) {
+      _hasMoreMap[key] = false;
+      return const [];
+    }
+    final next = list.skip(offset).take(limit).toList();
+    final current = _pagedResults[key] ?? <BookModel>[];
+    current.addAll(next);
+    _pagedResults[key] = current;
+    _localOffsets[key] = offset + next.length;
+    _hasMoreMap[key] = (_localOffsets[key]! < list.length);
+    notifyListeners();
+    return next;
+  }
+
+  /// مُساعد للسحب للتحديث: يعيد تحميل الصفحة الأولى بالإعدادات نفسها
+  Future<List<BookModel>> refreshBooksPage({
+    String? category,
+    String orderBy = 'createdAt',
+    bool descending = true,
+    int limit = 20,
+  }) async {
+    return await loadFirstBooksPage(
+      category: category,
+      orderBy: orderBy,
+      descending: descending,
+      limit: limit,
+    );
+  }
+
+  /// إنشاء قائمة محلية مفلترة ومفرزة للاستخدام عند غياب المستودع
+  List<BookModel> _buildLocallyFilteredSorted(String? category, String orderBy, bool descending) {
+    List<BookModel> list = getBooksByCategory(category ?? 'الكل');
+    int cmp<T extends Comparable>(T a, T b) => a.compareTo(b);
+
+    if (orderBy == 'averageRating') {
+      list.sort((a, b) => cmp(b.averageRating, a.averageRating));
+    } else if (orderBy == 'downloadCount') {
+      list.sort((a, b) => cmp(b.downloadCount, a.downloadCount));
+    } else {
+      list.sort((a, b) => cmp(b.createdAt, a.createdAt));
+    }
+    if (!descending) list = list.reversed.toList();
+    return list;
+  }
 
   // فئات الكتب
   static const List<String> categories = [
@@ -84,7 +272,7 @@ class BookService extends ChangeNotifier {
 
   Future<void> _loadFromRemote() async {
     if (_repository == null) return;
-  if (_isLoading) return; // تفادي التوازي
+    if (_isLoading) return; // تفادي التوازي
     try {
       _setLoading(true);
       if (kDebugMode) debugPrint('[BookService] fetching remote books...');
@@ -94,16 +282,18 @@ class BookService extends ChangeNotifier {
         int replaced = 0;
         for (final rb in remote) {
           final idx = _books.indexWhere((b) => b.id == rb.id);
-            if (idx != -1) {
-              _books[idx] = rb; // تحديث
-              replaced++;
-            } else {
-              _books.add(rb); // إضافة جديدة
-            }
+          if (idx != -1) {
+            _books[idx] = rb; // تحديث
+            replaced++;
+          } else {
+            _books.add(rb); // إضافة جديدة
+          }
         }
         if (kDebugMode) debugPrint('[BookService] merged remote books: fetched=${remote.length} replaced=$replaced totalNow=${_books.length}');
+        _invalidatePagedCache();
       } else if (kDebugMode) {
         debugPrint('[BookService] remote books list empty; keeping local sample');
+        _invalidatePagedCache();
       }
     } catch (e) {
       _setError('فشل في جلب البيانات السحابية');
@@ -186,7 +376,8 @@ class BookService extends ChangeNotifier {
         }
         // إزالة الكتب المحلية التي حُذفت من السحابة
         _books.removeWhere((b) => remote.every((r) => r.id != b.id));
-        if (kDebugMode) debugPrint('[BookService] realtime books update fetched=${remote.length} replaced=$replaced total=${_books.length}');
+        if (kDebugMode) debugPrint('[BookService] realtime books update fetched=${remote.length} replaced=$replaced total=${_books.length}]');
+        _invalidatePagedCache();
         notifyListeners();
       }, onError: (e) {
         if (kDebugMode) debugPrint('[BookService] realtime listen error: $e');
@@ -247,18 +438,80 @@ class BookService extends ChangeNotifier {
     return sorted.take(limit).toList();
   }
 
-  // حفظ كتاب
-  Future<void> saveBook(String bookId) async {
+  // الحصول على الكتب الأحدث
+  List<BookModel> getNewestBooks({int limit = 10}) {
+    final sorted = List<BookModel>.from(books);
+    sorted.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return sorted.take(limit).toList();
+  }
+
+  /// الأكثر شعبية (Trending): ترتيب ديناميكي بدرجة مركّبة
+  /// score = downloadCount * 1 + totalReviews * 2 + averageRating * 10
+  /// يمكن تحسين المعادلة لاحقاً بإضافة عوامل أخرى (أحدثية، تصنيف المستخدم، ...)
+  List<BookModel> getTrendingBooks({int limit = 10}) {
+    final sorted = List<BookModel>.from(books);
+    double score(BookModel b) =>
+        (b.downloadCount.toDouble()) +
+        (b.totalReviews.toDouble() * 2) +
+        (b.averageRating * 10);
+    sorted.sort((a, b) => score(b).compareTo(score(a)));
+    return sorted.take(limit).toList();
+  }
+
+  // مزامنة المحفوظات من السحابة لهذا المستخدم
+  Future<void> loadSavedBooksFromRemote(String userId) async {
+    if (_repository == null) return; // لا سحابة
+    try {
+      final ids = await _repository!.getUserLibraryByStatus(userId, 'saved');
+      _savedBooks
+        ..clear()
+        ..addAll(ids);
+      notifyListeners();
+    } catch (e) {
+      if (kDebugMode) debugPrint('[BookService] failed to load saved books: $e');
+    }
+  }
+
+  // حفظ كتاب (اختياري: تمرير userId لحفظه في Firestore)
+  Future<void> saveBook(String bookId, {String? userId}) async {
     if (!_savedBooks.contains(bookId)) {
       _savedBooks.add(bookId);
       notifyListeners();
     }
+    // حفظ سحابي عند توفر userId والمستودع
+    if (_repository != null && userId != null && userId.isNotEmpty) {
+      try {
+        await _repository!.addToUserLibrary(userId, bookId, 'saved');
+      } catch (e) {
+        if (kDebugMode) debugPrint('[BookService] saveBook remote failed: $e');
+      }
+    }
   }
 
-  // إلغاء حفظ كتاب
-  Future<void> unsaveBook(String bookId) async {
+  // إلغاء حفظ كتاب (اختياري: تمرير userId لإزالته من Firestore)
+  Future<void> unsaveBook(String bookId, {String? userId}) async {
     _savedBooks.remove(bookId);
     notifyListeners();
+    if (_repository != null && userId != null && userId.isNotEmpty) {
+      try {
+        await _repository!.removeFromUserLibrary(userId, bookId);
+      } catch (e) {
+        if (kDebugMode) debugPrint('[BookService] unsaveBook remote failed: $e');
+      }
+    }
+  }
+
+  /// تبديل حالة الحفظ وإرجاع الحالة الجديدة (true محفوظ | false غير محفوظ)
+  /// إن تم تمرير userId مع وجود مستودع سيتم تحديث الحالة في Firestore أيضاً
+  Future<bool> toggleSavedBook(String bookId, {String? userId}) async {
+    final nowSaved = isBookSaved(bookId);
+    if (nowSaved) {
+      await unsaveBook(bookId, userId: userId);
+      return false;
+    } else {
+      await saveBook(bookId, userId: userId);
+      return true;
+    }
   }
 
   // التحقق من حفظ الكتاب
@@ -418,9 +671,9 @@ class BookService extends ChangeNotifier {
     required int currentPage,
     required int totalPages,
     Duration? additionalReadingTime,
-  Map<String, dynamic>? bookmarks,
-  Map<String, dynamic>? highlights,
-  double? scrollOffset,
+    Map<String, dynamic>? bookmarks,
+    Map<String, dynamic>? highlights,
+    double? scrollOffset,
   }) async {
     final existingIndex = _readingProgress.indexWhere(
       (progress) => progress.bookId == bookId && progress.userId == userId,
@@ -461,29 +714,72 @@ class BookService extends ChangeNotifier {
     }
 
     notifyListeners();
-    // تحديث سحابي إن توفر مستودع
+    // تحديث سحابي إن توفر مستودع مع تجميع وتأجيل الكتابة
+    final key = '${userId}_$bookId';
     try {
-      final key = '${userId}_$bookId';
+      // اجمع الزمن الإضافي محلياً حتى يتم دفعه لاحقاً
+      final add = additionalReadingTime ?? Duration.zero;
+      _pendingReadingTime[key] = (_pendingReadingTime[key] ?? Duration.zero) + add;
+
+      if (_repository == null) return;
+
+      // إن لم يمض وقت كافٍ منذ آخر كتابة، أجّل الطلب
+      final last = _lastRemoteWrite[key];
+      if (last != null && DateTime.now().difference(last) < _remoteWriteDebounce) {
+        _syncStatus[key] = 'idle';
+        notifyListeners();
+        return;
+      }
+
+      // ادفع آخر حالة حالية مع الزمن المُجمّع
       _syncStatus[key] = 'syncing';
       notifyListeners();
-      await _repository?.updateProgressData(
+      await _repository!.updateProgressData(
         userId: userId,
         bookId: bookId,
         currentPage: currentPage,
         totalPages: totalPages,
-        additionalReadingTime: additionalReadingTime,
+        additionalReadingTime: _pendingReadingTime[key]?.inSeconds == 0 ? null : _pendingReadingTime[key],
         bookmarks: bookmarks,
         highlights: highlights,
       );
+      _pendingReadingTime[key] = Duration.zero;
+      _lastRemoteWrite[key] = DateTime.now();
       _syncStatus[key] = 'success';
       notifyListeners();
     } catch (_) {
-      final key = '${userId}_$bookId';
       _syncStatus[key] = 'failed';
       notifyListeners();
     }
   }
 
+  // دفع فوري للحالة الحالية إلى السحابة (يُستدعى عند الإنهاء)
+  Future<void> flushProgress(String userId, String bookId) async {
+    if (_repository == null) return;
+    final key = '${userId}_$bookId';
+    final p = getReadingProgress(bookId, userId);
+    if (p == null) return;
+    try {
+      _syncStatus[key] = 'syncing';
+      notifyListeners();
+      await _repository!.updateProgressData(
+        userId: userId,
+        bookId: bookId,
+        currentPage: p.currentPage,
+        totalPages: p.totalPages,
+        additionalReadingTime: _pendingReadingTime[key]?.inSeconds == 0 ? null : _pendingReadingTime[key],
+        bookmarks: p.bookmarks,
+        highlights: p.highlights,
+      );
+      _pendingReadingTime[key] = Duration.zero;
+      _lastRemoteWrite[key] = DateTime.now();
+      _syncStatus[key] = 'success';
+      notifyListeners();
+    } catch (_) {
+      _syncStatus[key] = 'failed';
+      notifyListeners();
+    }
+  }
 
   // Merge helper: combine readingTime and union bookmarks/highlights.
   ReadingProgressModel _mergeProgress(ReadingProgressModel a, ReadingProgressModel b, {String? prefer}) {
@@ -830,9 +1126,19 @@ class BookService extends ChangeNotifier {
     notifyListeners();
   }
 
-  void clearError() {
-    _error = null;
-    notifyListeners();
+  void _invalidatePagedCache() {
+    _pagedResults.clear();
+    _pageCursors.clear();
+    _hasMoreMap.clear();
+    _localOffsets.clear();
+  }
+
+  String? _extractIndexUrl(String? message) {
+    if (message == null) return null;
+    // Firebase عادة يُرجع رابط إنشاء الفهرس ضمن الرسالة
+    final regex = RegExp(r'https?://[^\s)]+');
+    final match = regex.firstMatch(message);
+    return match?.group(0);
   }
 
   @override

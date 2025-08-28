@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 
 import '../../models/book_model.dart';
 import '../../services/book_service.dart';
@@ -7,6 +8,8 @@ import '../book/book_details_screen.dart';
 import '../../widgets/mobile_book_card.dart';
 import 'popular_books_screen.dart';
 import 'category_books_screen.dart';
+import 'newest_books_screen.dart';
+import 'top_rated_books_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -35,18 +38,19 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
             // شريط البحث المحسن
-            _buildEnhancedSearchBar(),
+            _buildEnhancedSearchBar(l10n),
             
             // المحتوى الرئيسي
             Expanded(
               child: _searchController.text.isEmpty
-                  ? _buildDiscoverSections()
-                  : _buildSearchResults(),
+                  ? _buildDiscoverSections(l10n)
+                  : _buildSearchResults(l10n),
             ),
           ],
         ),
@@ -54,7 +58,7 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  Widget _buildEnhancedSearchBar() {
+  Widget _buildEnhancedSearchBar(AppLocalizations l10n) {
     return Container(
       margin: const EdgeInsets.all(16),
       child: Container(
@@ -86,14 +90,14 @@ class _SearchScreenState extends State<SearchScreen> {
               child: TextField(
                 controller: _searchController,
                 focusNode: _searchFocus,
-                decoration: const InputDecoration(
-                  hintText: 'ابحث عن كتاب، مؤلف، أو موضوع...',
-                  hintStyle: TextStyle(
+                decoration: InputDecoration(
+                  hintText: l10n.searchHint,
+                  hintStyle: const TextStyle(
                     color: Colors.grey,
                     fontSize: 16,
                   ),
                   border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(vertical: 16),
+                  contentPadding: const EdgeInsets.symmetric(vertical: 16),
                 ),
                 style: const TextStyle(
                   fontSize: 16,
@@ -114,7 +118,7 @@ class _SearchScreenState extends State<SearchScreen> {
                     Icons.close,
                     color: Colors.grey,
                   ),
-                  tooltip: 'مسح',
+                  tooltip: l10n.clear,
                 ),
               ),
           ],
@@ -123,9 +127,11 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  Widget _buildDiscoverSections() {
+  Widget _buildDiscoverSections(AppLocalizations l10n) {
     final bookService = Provider.of<BookService>(context);
     final popular = bookService.getMostDownloadedBooks(limit: 12);
+    final newest = bookService.getNewestBooks(limit: 12);
+    final topRated = bookService.getTopRatedBooks(limit: 12);
     final categories = BookService.categories;
 
     return SingleChildScrollView(
@@ -139,13 +145,13 @@ class _SearchScreenState extends State<SearchScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('🔥 الأكثر رواجاً', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                Text(l10n.popularTitle, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 TextButton(
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const PopularBooksScreen()),
                   ),
-                  child: const Text('عرض الكل'),
+                  child: Text(l10n.seeAll),
                 )
               ],
             ),
@@ -172,10 +178,88 @@ class _SearchScreenState extends State<SearchScreen> {
 
           const SizedBox(height: 12),
 
+          // قسم الأحدث
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(l10n.newestTitle, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                TextButton(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const NewestBooksScreen()),
+                  ),
+                  child: Text(l10n.seeAll),
+                )
+              ],
+            ),
+          ),
+          SizedBox(
+            height: 240,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              itemCount: newest.length,
+              itemBuilder: (context, index) {
+                final book = newest[index];
+                return Container(
+                  width: 140,
+                  margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  child: MobileBookCard(
+                    book: book,
+                    onTap: () => _navigateToBookDetails(book),
+                  ),
+                );
+              },
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // الأعلى تقييماً
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(l10n.topRatedTitle, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                TextButton(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const TopRatedBooksScreen()),
+                  ),
+                  child: Text(l10n.seeAll),
+                )
+              ],
+            ),
+          ),
+          SizedBox(
+            height: 240,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              itemCount: topRated.length,
+              itemBuilder: (context, index) {
+                final book = topRated[index];
+                return Container(
+                  width: 140,
+                  margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  child: MobileBookCard(
+                    book: book,
+                    onTap: () => _navigateToBookDetails(book),
+                  ),
+                );
+              },
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
           // فئات بعرض أيقونات
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: Text('الفئات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(l10n.categoriesTitle, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           ),
           const SizedBox(height: 8),
           SizedBox(
@@ -202,7 +286,7 @@ class _SearchScreenState extends State<SearchScreen> {
           const SizedBox(height: 16),
 
           // اقتراحات/بحث فارغ سابقاً
-          _buildSearchSuggestions(),
+          _buildSearchSuggestions(l10n),
         ],
       ),
     );
@@ -237,20 +321,20 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
-  Widget _buildSearchSuggestions() {
-    return const Center(
+  Widget _buildSearchSuggestions(AppLocalizations l10n) {
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
+          const Icon(
             Icons.search,
             size: 80,
             color: Colors.grey,
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           Text(
-            'ابحث عن كتبك المفضلة',
-            style: TextStyle(
+            l10n.searchEmptyPrompt,
+            style: const TextStyle(
               fontSize: 20,
               color: Colors.grey,
             ),
@@ -260,34 +344,34 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  Widget _buildSearchResults() {
+  Widget _buildSearchResults(AppLocalizations l10n) {
     if (_isSearching) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('جارٍ البحث...'),
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text(l10n.searching),
           ],
         ),
       );
     }
 
     if (_searchResults.isEmpty) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
+            const Icon(
               Icons.search_off,
               size: 80,
               color: Colors.grey,
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             Text(
-              'لم يتم العثور على نتائج',
-              style: TextStyle(
+              l10n.noResults,
+              style: const TextStyle(
                 fontSize: 20,
                 color: Colors.grey,
               ),

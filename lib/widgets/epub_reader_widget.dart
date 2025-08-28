@@ -6,6 +6,10 @@ import 'package:http/http.dart' as http;
 import 'package:archive/archive.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart';
+import 'dart:async';
+import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:screen_brightness/screen_brightness.dart';
 
 import '../services/book_service.dart';
 import '../utils/enhanced_design_tokens.dart';
@@ -35,18 +39,56 @@ class _EpubReaderWidgetState extends State<EpubReaderWidget> {
   bool _sepiaMode = false; // وضع ورق أصفر كلاسيكي
   bool _nightMode = false; // وضع ليلي محلي مستقل عن ثيم التطبيق
 
+  // حالة إظهار واجهة القراءة الغامرة
+  bool _showUI = false; // افتراضياً مخفية
+  Timer? _uiTimer;
+  double _brightness = 0.8;
+  bool _brightLoaded = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
     _scroll.addListener(_onScroll);
+    // تفعيل وضع ملء الشاشة الغامر
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    WakelockPlus.enable();
+    _initBrightness();
+  }
+
+  Future<void> _initBrightness() async {
+    try {
+      final current = await ScreenBrightness().current;
+      if (mounted) setState(() { _brightness = current; _brightLoaded = true; });
+    } catch (_) {
+      if (mounted) setState(() { _brightLoaded = true; });
+    }
   }
 
   @override
   void dispose() {
     _scroll.removeListener(_onScroll);
     _scroll.dispose();
+    _uiTimer?.cancel();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    WakelockPlus.disable();
+    // Flush any pending reading-time/progress updates (fire and forget)
+    try {
+      widget.bookService.flushProgress(widget.userId, widget.bookId);
+    } catch (_) {}
     super.dispose();
+  }
+
+  void _toggleUI() {
+    setState(() => _showUI = !_showUI);
+    if (_showUI) _restartAutoHide();
+  }
+
+  void _restartAutoHide() {
+    _uiTimer?.cancel();
+    _uiTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted) setState(() => _showUI = false);
+    });
   }
 
   Future<void> _load() async {
@@ -213,7 +255,7 @@ class _EpubReaderWidgetState extends State<EpubReaderWidget> {
         blocks.add(_Paragraph('[صورة]', ParagraphType.image, imageUrl: images.isNotEmpty ? images.first : null));
         // إزالة وسم الصورة من النص
         raw = raw.replaceAll(imageInText, '');
-        print('صورة مضافة كفقرة');
+        print('صورة مadded كفقرة');
       }
       
       // إزالة أي وسوم متبقية
@@ -307,7 +349,6 @@ class _EpubReaderWidgetState extends State<EpubReaderWidget> {
   @override
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
-    
     if (_chapters.isEmpty) {
       return Center(
         child: Padding(
@@ -413,62 +454,100 @@ class _EpubReaderWidgetState extends State<EpubReaderWidget> {
       );
     }
 
-    return Column(
-      children: [
-        _buildTopBar(),
-        Expanded(
-          child: Container(
-            color: bg,
-            child: GestureDetector(
-              onHorizontalDragEnd: (details) async {
-                final v = details.primaryVelocity ?? 0;
-                if (v < 0 && _index < _chapters.length - 1) {
-                  setState(() => _index++);
-                  await _savePageProgress();
-                } else if (v > 0 && _index > 0) {
-                  setState(() => _index--);
-                  await _savePageProgress();
-                }
-              },
-              child: SingleChildScrollView(
-                controller: _scroll,
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: widgets,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _toggleUI,
+      child: Column(
+        children: [
+          if (_showUI) _buildTopBar(),
+          Expanded(
+            child: Container(
+              color: bg,
+              child: GestureDetector(
+                onHorizontalDragEnd: (details) async {
+                  // Swipe left or right to navigate chapters
+                  if (details.velocity.pixelsPerSecond.dx > 500) {
+                    // Swiped right
+                    if (_index > 0) {
+                      setState(() => _index--);
+                      await _savePageProgress();
+                    }
+                  } else if (details.velocity.pixelsPerSecond.dx < -500) {
+                    // Swiped left
+                    if (_index < _chapters.length - 1) {
+                      setState(() => _index++);
+                      await _savePageProgress();
+                    }
+                  }
+                  if (_showUI) _restartAutoHide();
+                },
+                child: SingleChildScrollView(
+                  controller: _scroll,
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: widgets,
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-        SafeArea(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.chevron_left),
-                onPressed: _index > 0
-                    ? () async {
-                        setState(() => _index--);
-                        await _savePageProgress();
-                      }
-                    : null,
+          if (_showUI) ...[
+            SafeArea(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.chevron_left),
+                    onPressed: _index > 0
+                        ? () async {
+                            setState(() => _index--);
+                            await _savePageProgress();
+                            _restartAutoHide();
+                          }
+                        : null,
+                  ),
+                  Text('${_index + 1} / ${_chapters.length}'),
+                  IconButton(
+                    icon: const Icon(Icons.chevron_right),
+                    onPressed: _index < _chapters.length - 1
+                        ? () async {
+                            setState(() => _index++);
+                            await _savePageProgress();
+                            _restartAutoHide();
+                          }
+                        : null,
+                  ),
+                ],
               ),
-              Text('${_index + 1} / ${_chapters.length}'),
-              IconButton(
-                icon: const Icon(Icons.chevron_right),
-                onPressed: _index < _chapters.length - 1
-                    ? () async {
-                        setState(() => _index++);
-                        await _savePageProgress();
-                      }
-                    : null,
+            ),
+            _buildSliderBar(),
+            if (_brightLoaded)
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  child: Row(children: [
+                    const Icon(Icons.brightness_6, size: 18),
+                    Expanded(
+                      child: Slider(
+                        value: _brightness.clamp(0.0, 1.0),
+                        min: 0.0,
+                        max: 1.0,
+                        divisions: 10,
+                        label: 'سطوع ${(_brightness * 100).toInt()}%',
+                        onChanged: (v) async {
+                          setState(() => _brightness = v);
+                          try { await ScreenBrightness().setScreenBrightness(v); } catch (_) {}
+                        },
+                      ),
+                    ),
+                  ]),
+                ),
               ),
-            ],
-          ),
-        ),
-        _buildSliderBar(),
-      ],
+          ],
+        ],
+      ),
     );
   }
 

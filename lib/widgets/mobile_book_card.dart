@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'safe_image.dart';
 import '../models/book_model.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 /// كارت كتاب محسّن خصيصاً للهواتف المحمولة
 class MobileBookCard extends StatefulWidget {
@@ -135,146 +137,148 @@ class _MobileBookCardState extends State<MobileBookCard>
   Widget _buildBookCover() {
     return Expanded(
       flex: 65,
-      child: Container(
-        width: double.infinity,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              _categoryColor,
-              _categoryColor.withOpacity(0.8),
-            ],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-        child: Stack(
-          children: [
-            // صورة الغلاف
-            Positioned.fill(
-              child: widget.book.coverImageUrl.isNotEmpty
-                  ? ClipRRect(
-                      child: Image.network(
-                        widget.book.coverImageUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (c, e, s) => _fallbackCover(),
-                      ),
-                    )
-                  : _fallbackCover(),
+      child: Hero(
+        tag: 'book_cover_${widget.book.id}',
+        child: Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                _categoryColor,
+                _categoryColor.withOpacity(0.8),
+              ],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
             ),
-            // تدرج غامق لتحسين قابلية قراءة النص فوق الصورة
-            Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withOpacity(0.10),
-                      Colors.black.withOpacity(0.35),
+          ),
+          child: Stack(
+            children: [
+              // صورة الغلاف
+              Positioned.fill(
+                child: widget.book.coverImageUrl.isNotEmpty
+                    ? ClipRRect(
+                        child: SafeImage(
+                          assetPath: widget.book.coverImageUrl,
+                          fit: BoxFit.cover,
+                        ),
+                      )
+                    : _fallbackCover(),
+              ),
+              // تدرج غامق لتحسين قابلية قراءة النص فوق الصورة
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withOpacity(0.10),
+                        Colors.black.withOpacity(0.35),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              // أيقونة الكتاب الرئيسية
+              Center(
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Icon(
+                    Icons.menu_book_rounded,
+                    size: 36,
+                    color: Colors.white.withOpacity(0.9),
+                  ),
+                ),
+              ),
+
+              // تصنيف الكتاب
+              Positioned(
+                top: 12,
+                right: 12,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.3),
+                      width: 0.5,
+                    ),
+                  ),
+                  child: Text(
+                    widget.book.category,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+
+              // زر المفضلة
+              Positioned(
+                top: 8,
+                left: 8,
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(20),
+                    onTap: widget.onBookmark,
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      child: Icon(
+                        widget.isBookmarked 
+                            ? Icons.bookmark_rounded
+                            : Icons.bookmark_outline_rounded,
+                        size: 18,
+                        color: widget.isBookmarked 
+                            ? Colors.amber.shade300
+                            : Colors.white.withOpacity(0.8),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+              // التقييم
+              Positioned(
+                bottom: 12,
+                left: 12,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.star_rounded,
+                        size: 12,
+                        color: Colors.amber.shade300,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        widget.book.averageRating.toStringAsFixed(1),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ),
-            ),
-
-            // أيقونة الكتاب الرئيسية
-            Center(
-              child: Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Icon(
-                  Icons.menu_book_rounded,
-                  size: 36,
-                  color: Colors.white.withOpacity(0.9),
-                ),
-              ),
-            ),
-
-            // تصنيف الكتاب
-            Positioned(
-              top: 12,
-              right: 12,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.3),
-                    width: 0.5,
-                  ),
-                ),
-                child: Text(
-                  widget.book.category,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-
-            // زر المفضلة
-            Positioned(
-              top: 8,
-              left: 8,
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(20),
-                  onTap: widget.onBookmark,
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    child: Icon(
-                      widget.isBookmarked 
-                          ? Icons.bookmark_rounded
-                          : Icons.bookmark_outline_rounded,
-                      size: 18,
-                      color: widget.isBookmarked 
-                          ? Colors.amber.shade300
-                          : Colors.white.withOpacity(0.8),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            // التقييم
-            Positioned(
-              bottom: 12,
-              left: 12,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.star_rounded,
-                      size: 12,
-                      color: Colors.amber.shade300,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      widget.book.averageRating.toStringAsFixed(1),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -629,6 +633,58 @@ class MobileBookListTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class SafeImage extends StatelessWidget {
+  final String assetPath;
+  final BoxFit fit;
+  final double? width;
+  final double? height;
+  final Widget? placeholder;
+  final Widget? errorWidget;
+
+  const SafeImage({
+    super.key,
+    required this.assetPath,
+    this.fit = BoxFit.cover,
+    this.width,
+    this.height,
+    this.placeholder,
+    this.errorWidget,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return CachedNetworkImage(
+      imageUrl: assetPath,
+      fit: fit,
+      width: width,
+      height: height,
+      placeholder: (context, url) => placeholder ??
+          Container(
+            color: Colors.grey.shade200,
+            width: width,
+            height: height,
+            child: const Center(
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+              ),
+            ),
+          ),
+      errorWidget: (context, url, error) => errorWidget ??
+          Container(
+            color: Colors.grey.shade300,
+            width: width,
+            height: height,
+            child: const Icon(
+              Icons.error_outline,
+              color: Colors.red,
+              size: 28,
+            ),
+          ),
     );
   }
 }

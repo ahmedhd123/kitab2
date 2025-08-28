@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../services/book_service.dart';
+import '../../services/auth_firebase_service.dart';
 import '../../widgets/mobile_book_card.dart';
 import '../../models/book_model.dart';
 import '../book/book_details_screen.dart';
@@ -14,68 +18,178 @@ class CategoryBooksScreen extends StatefulWidget {
 }
 
 class _CategoryBooksScreenState extends State<CategoryBooksScreen> {
-  static const int pageSize = 12;
-  int _page = 0;
+  final ScrollController _scrollController = ScrollController();
+  bool _initialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _loadFirst();
+    });
+    _scrollController.addListener(_onScroll);
+  }
+
+  Future<void> _loadFirst() async {
+    final service = context.read<BookService>();
+    await service.loadFirstBooksPage(
+        category: widget.category,
+        orderBy: 'createdAt',
+        descending: true,
+        limit: 20);
+    if (mounted) setState(() => _initialized = true);
+  }
+
+  void _onScroll() {
+    final service = context.read<BookService>();
+    if (!service.hasMorePaged(
+        category: widget.category,
+        orderBy: 'createdAt',
+        descending: true)) return;
+    if (service.isLoading) return;
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 300) {
+      service.loadNextBooksPage(
+          category: widget.category,
+          orderBy: 'createdAt',
+          descending: true,
+          limit: 20);
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final bookService = Provider.of<BookService>(context);
-    final all = widget.category == 'الكل'
-        ? bookService.books
-        : bookService.getBooksByCategory(widget.category);
+    final l10n = AppLocalizations.of(context)!;
+    final service = context.watch<BookService>();
+    final items = service.getPagedBooks(
+        category: widget.category,
+        orderBy: 'createdAt',
+        descending: true);
+    final hasMore = service.hasMorePaged(
+        category: widget.category,
+        orderBy: 'createdAt',
+        descending: true);
 
-    final totalPages = (all.length / pageSize).ceil().clamp(1, 9999);
-    final start = (_page * pageSize).clamp(0, all.length);
-    final end = ((_page + 1) * pageSize).clamp(0, all.length);
-    final pageItems = all.sublist(start, end);
+    Widget listContent() {
+      return RefreshIndicator(
+        onRefresh: _loadFirst,
+        child: GridView.builder(
+          controller: _scrollController,
+          padding: const EdgeInsets.all(12),
+          gridDelegate:
+              const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            childAspectRatio: 0.65,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+          ),
+          itemCount: items.length + (hasMore ? 1 : 0),
+          itemBuilder: (context, index) {
+            if (index >= items.length) {
+              return const Center(
+                  child: Padding(
+                padding: EdgeInsets.all(8.0),
+                child: CircularProgressIndicator(),
+              ));
+            }
+            final book = items[index];
+            final isSaved = context.read<BookService>().isBookSaved(book.id);
+            return MobileBookCard(
+              book: book,
+              isBookmarked: isSaved,
+              onTap: () => _openDetails(context, book),
+              onBookmark: () async {
+                final uid = context.read<AuthFirebaseService>().currentUser?.uid;
+                await service.toggleSavedBook(book.id, userId: uid);
+              },
+            );
+          },
+        ),
+      );
+    }
+
+    Widget bannerOrEmpty(Widget child) {
+      return _bannerOrEmpty(context, l10n, child);
+    }
 
     return Scaffold(
       appBar: AppBar(title: Text(widget.category)),
-      body: Column(
+      body: !_initialized && service.isLoading
+          ? _buildSkeletonGrid()
+          : items.isEmpty
+              ? bannerOrEmpty(Center(child: Text(l10n.categoryEmpty)))
+              : bannerOrEmpty(listContent()),
+    );
+  }
+
+  Widget _buildSkeletonGrid() {
+    return GridView.builder(
+      padding: const EdgeInsets.all(12),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        childAspectRatio: 0.65,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+      ),
+      itemCount: 6,
+      itemBuilder: (_, __) => _skeletonCard(),
+    );
+  }
+
+  Widget _skeletonCard() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
         children: [
           Expanded(
-            child: pageItems.isEmpty
-                ? const Center(child: Text('لا توجد كتب في هذه الفئة'))
-                : GridView.builder(
-                    padding: const EdgeInsets.all(12),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      childAspectRatio: 0.65,
-                      crossAxisSpacing: 8,
-                      mainAxisSpacing: 8,
-                    ),
-                    itemCount: pageItems.length,
-                    itemBuilder: (context, index) {
-                      final book = pageItems[index];
-                      return MobileBookCard(
-                        book: book,
-                        onTap: () => _openDetails(context, book),
-                      );
-                    },
-                  ),
+            flex: 65,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16),
+                ),
+              ),
+            ),
           ),
-          _buildPaginator(totalPages),
+          Expanded(
+            flex: 35,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _skeletonLine(width: 120),
+                  const SizedBox(height: 8),
+                  _skeletonLine(width: 80),
+                  const Spacer(),
+                  _skeletonLine(width: 60),
+                ],
+              ),
+            ),
+          )
         ],
       ),
     );
   }
 
-  Widget _buildPaginator(int totalPages) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          IconButton(
-            onPressed: _page > 0 ? () => setState(() => _page--) : null,
-            icon: const Icon(Icons.chevron_right),
-          ),
-          Text('صفحة ${_page + 1} من $totalPages'),
-          IconButton(
-            onPressed: _page < totalPages - 1 ? () => setState(() => _page++) : null,
-            icon: const Icon(Icons.chevron_left),
-          ),
-        ],
+  Widget _skeletonLine({double width = 100}) {
+    return Container(
+      width: width,
+      height: 12,
+      decoration: BoxDecoration(
+        color: Colors.grey.shade300,
+        borderRadius: BorderRadius.circular(8),
       ),
     );
   }
@@ -84,6 +198,48 @@ class _CategoryBooksScreenState extends State<CategoryBooksScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => BookDetailsScreen(book: book)),
+    );
+  }
+
+  Widget _bannerOrEmpty(BuildContext context, AppLocalizations l10n, Widget child) {
+    final service = context.watch<BookService>();
+    return Column(
+      children: [
+        if (service.hasIndexHint && service.lastMissingIndexUrl != null)
+          MaterialBanner(
+            content: Text(l10n.indexHintDesc),
+            leading: const Icon(Icons.info_outline),
+            actions: [
+              TextButton(
+                onPressed: () async {
+                  final link = service.lastMissingIndexUrl!;
+                  try { await launchUrl(Uri.parse(link), mode: LaunchMode.externalApplication); } catch (_) {}
+                },
+                child: Text(l10n.openLink),
+              ),
+              TextButton(
+                onPressed: () async {
+                  final link = service.lastMissingIndexUrl!;
+                  await Clipboard.setData(ClipboardData(text: link));
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(l10n.linkCopied)),
+                  );
+                },
+                child: Text(l10n.copyLink),
+              ),
+              TextButton(
+                onPressed: () => context.read<BookService>().clearIndexHint(),
+                child: Text(l10n.dismiss),
+              ),
+            ],
+            backgroundColor: Colors.amber.shade50,
+            elevation: 0,
+            dividerColor: Colors.amber.shade200,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          ),
+        Expanded(child: child),
+      ],
     );
   }
 }

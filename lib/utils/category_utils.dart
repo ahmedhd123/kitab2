@@ -1,0 +1,81 @@
+import 'package:flutter/material.dart';
+
+/// ألوان مميزة لكل فئة لانسجام التصميم
+Color getCategoryAccent(String category) {
+  const colors = {
+    'الأدب': Color(0xFFE57C2F),
+    'الروايات': Color(0xFFB26B35),
+    'الشعر': Color(0xFFDB5068),
+    'الخيال العلمي': Color(0xFF5468FF),
+    'الفانتازيا': Color(0xFF8C54D9),
+    'الرومانسية': Color(0xFFE85D75),
+    'الغموض والإثارة': Color(0xFF159D86),
+    'السيرة الذاتية والمذكرات': Color(0xFF6B7280),
+    'التنمية الذاتية': Color(0xFF2E8B57),
+    'ريادة الأعمال': Color(0xFF1F8A70),
+    'الاقتصاد وإدارة الأعمال': Color(0xFF1F8A70),
+    'العلوم': Color(0xFF2F7DE5),
+    'البرمجة والتقنية': Color(0xFF0EA5E9),
+    'الرياضيات': Color(0xFF10B981),
+    'الفيزياء': Color(0xFF0284C7),
+    'الكيمياء': Color(0xFF22C55E),
+    'الأحياء': Color(0xFF16A34A),
+    'الطب والصحة': Color(0xFF14B8A6),
+    'التاريخ': Color(0xFF8C54D9),
+    'الجغرافيا': Color(0xFFEF6C00),
+    'الفلسفة': Color(0xFFDB5068),
+    'الدين والفكر الإسلامي': Color(0xFF2E8B57),
+    'التربية والتعليم': Color(0xFF7C3AED),
+    'علم النفس': Color(0xFFFB923C),
+    'علم الاجتماع': Color(0xFF0891B2),
+    'القانون والسياسة': Color(0xFFEF4444),
+    'الفنون': Color(0xFFF59E0B),
+    'التصميم والتصوير': Color(0xFFF43F5E),
+    'الهوايات والمهارات': Color(0xFF06B6D4),
+    'السفر والرحلات': Color(0xFF0EA5E9),
+    'الطبخ والتغذية': Color(0xFFB26B35),
+    'الأطفال والناشئة': Color(0xFF22D3EE),
+    'كتب صوتية': Color(0xFF7DD3FC),
+  };
+  return colors[category] ?? const Color(0xFF6B7280);
+}
+
+/// أيقونات تمثيلية للفئات
+IconData getCategoryIcon(String category) {
+  const map = {
+    'الأدب': Icons.menu_book,
+    'الروايات': Icons.auto_stories,
+    'الشعر': Icons.format_quote,
+    'الخيال العلمي': Icons.science,
+    'الفانتازيا': Icons.auto_awesome,
+    'الرومانسية': Icons.favorite,
+    'الغموض والإثارة': Icons.visibility,
+    'السيرة الذاتية والمذكرات': Icons.person,
+    'التنمية الذاتية': Icons.trending_up,
+    'ريادة الأعمال': Icons.lightbulb,
+    'الاقتصاد وإدارة الأعمال': Icons.bar_chart,
+    'العلوم': Icons.biotech,
+    'البرمجة والتقنية': Icons.code,
+    'الرياضيات': Icons.calculate,
+    'الفيزياء': Icons.bolt,
+    'الكيمياء': Icons.science_outlined,
+    'الأحياء': Icons.eco,
+    'الطب والصحة': Icons.health_and_safety,
+    'التاريخ': Icons.account_balance,
+    'الجغرافيا': Icons.public,
+    'الفلسفة': Icons.psychology,
+    'الدين والفكر الإسلامي': Icons.mosque,
+    'التربية والتعليم': Icons.school,
+    'علم النفس': Icons.psychology_alt,
+    'علم الاجتماع': Icons.groups,
+    'القانون والسياسة': Icons.gavel,
+    'الفنون': Icons.brush,
+    'التصميم والتصوير': Icons.camera_alt,
+    'الهوايات والمهارات': Icons.sports_esports,
+    'السفر والرحلات': Icons.flight_takeoff,
+    'الطبخ والتغذية': Icons.restaurant,
+    'الأطفال والناشئة': Icons.child_friendly,
+    'كتب صوتية': Icons.headphones,
+  };
+  return map[category] ?? Icons.category;
+}

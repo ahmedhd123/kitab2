@@ -5,6 +5,13 @@ import '../models/book_model.dart';
 import '../models/reading_progress_model.dart';
 import 'package:flutter/foundation.dart';
 
+/// نتيجة صفحة كتب مع مؤشر للمتابعة
+class BookPageResult {
+  final List<BookModel> items;
+  final DocumentSnapshot<Map<String, dynamic>>? lastDoc;
+  BookPageResult({required this.items, required this.lastDoc});
+}
+
 /// مستودع للتعامل مع Firestore لعناصر الكتب والتقدم
 class BookRepository {
   final FirebaseFirestore _db;
@@ -244,6 +251,35 @@ class BookRepository {
       );
       await upsertProgress(updated);
     }
+  }
+
+  /// جلب صفحة من الكتب مع دعم التصفية والفرز والمؤشر (pagination)
+  /// orderBy: 'createdAt' | 'averageRating' | 'downloadCount'
+  Future<BookPageResult> fetchBooksPage({
+    String? category,
+    String orderBy = 'createdAt',
+    bool descending = true,
+    int limit = 20,
+    DocumentSnapshot<Map<String, dynamic>>? startAfter,
+  }) async {
+    Query<Map<String, dynamic>> q = _booksCol;
+
+    if (category != null && category.isNotEmpty && category != 'الكل') {
+      q = q.where('category', isEqualTo: category);
+    }
+
+    q = q.orderBy(orderBy, descending: descending);
+
+    if (startAfter != null) {
+      q = q.startAfterDocument(startAfter);
+    }
+
+    q = q.limit(limit);
+
+    final snap = await q.get();
+    final items = snap.docs.map((d) => _fromFirestoreBook(d)).toList();
+    final last = snap.docs.isNotEmpty ? snap.docs.last : null;
+    return BookPageResult(items: items, lastDoc: last);
   }
 
   BookModel _fromFirestoreBook(DocumentSnapshot<Map<String, dynamic>> doc) {

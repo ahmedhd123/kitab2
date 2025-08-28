@@ -9,12 +9,14 @@ import '../../services/external_book_search_service.dart';
 import '../../services/reading_list_service.dart';
 import '../../services/theme_service.dart';
 import '../../widgets/mobile_book_card.dart';
+import '../../utils/category_utils.dart';
 
 import '../book/books_screen.dart';
 import '../book/book_details_screen.dart';
 import '../library/library_screen.dart';
 import '../profile/profile_screen.dart';
 import '../plans/plans_hub_screen.dart';
+import '../search/category_books_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -177,22 +179,29 @@ class HomePage extends StatelessWidget {
             ),
           ),
 
-          // فئات سريعة
+          // فئات سريعة (أيقونات صغيرة)
           SizedBox(
-            height: 56,
+            height: 84,
             child: ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
               scrollDirection: Axis.horizontal,
               itemCount: BookService.categories.length,
               separatorBuilder: (_, __) => const SizedBox(width: 8),
               itemBuilder: (context, i) {
                 final c = BookService.categories[i];
-                return ActionChip(
-                  label: Text(c),
-                  avatar: const Icon(Icons.category, size: 18),
-                  onPressed: () {
-                    final parent = context.findAncestorStateOfType<_HomeScreenState>();
-                    parent?.switchTab(1);
+                final color = getCategoryAccent(c);
+                final icon = getCategoryIcon(c);
+                return _CategoryIconChip(
+                  color: color,
+                  icon: icon,
+                  label: c,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => CategoryExploreScreen(initialCategory: c),
+                      ),
+                    );
                   },
                 );
               },
@@ -765,17 +774,44 @@ class _SearchPageState extends State<SearchPage> {
   }
 }
 
-// مساعد ألوان الفئات للاستخدام في أكثر من صفحة
-Color getCategoryAccent(String category) {
-  const colors = {
-    'الأدب': Color(0xFFE57C2F),
-    'العلوم': Color(0xFF2F7DE5),
-    'التاريخ': Color(0xFF8C54D9),
-    'الفلسفة': Color(0xFFDB5068),
-    'التكنولوجيا': Color(0xFF159D86),
-    'الدين': Color(0xFF2E8B57),
-    'الطبخ': Color(0xFFB26B35),
-    'الرياضة': Color(0xFF5468FF),
-  };
-  return colors[category] ?? const Color(0xFF6B7280);
+class _CategoryIconChip extends StatelessWidget {
+  final Color color;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  const _CategoryIconChip({required this.color, required this.icon, required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: color.withOpacity(.12),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: color.withOpacity(.35)),
+            ),
+            child: Icon(icon, color: color),
+          ),
+        ),
+        const SizedBox(height: 6),
+        SizedBox(
+          width: 72,
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+        ),
+      ],
+    );
+  }
 }

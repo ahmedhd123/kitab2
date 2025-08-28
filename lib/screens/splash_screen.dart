@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_firebase_service.dart';
+import '../services/book_service.dart';
 // تمت إزالة SimpleAuthService بعد الانتقال الكامل إلى Firebase
 
 class SplashScreen extends StatefulWidget {
@@ -40,8 +41,15 @@ class _SplashScreenState extends State<SplashScreen>
       // محاكاة تهيئة خدمات مستقبلية (Firebase، إعدادات، ...)
       await Future.delayed(const Duration(milliseconds: 900));
       if (!mounted || _navigated) return;
-  final firebaseAuth = context.read<AuthFirebaseService>();
-  final target = firebaseAuth.currentUser != null ? '/home' : '/login';
+      final firebaseAuth = context.read<AuthFirebaseService>();
+      final target = firebaseAuth.currentUser != null ? '/home' : '/login';
+      // تحميل المحفوظات من السحابة إن كان المستخدم مسجلاً
+      if (firebaseAuth.currentUser != null) {
+        final uid = firebaseAuth.currentUser!.uid;
+        try {
+          await context.read<BookService>().loadSavedBooksFromRemote(uid);
+        } catch (_) {}
+      }
       _navigated = true;
       if (mounted) {
         Navigator.pushReplacementNamed(context, target);

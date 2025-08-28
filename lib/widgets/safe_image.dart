@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 /// أداة تحميل صورة آمنة مع محاولات بديلة للمسار عند الفشل (مفيد للويب)
 class SafeImage extends StatefulWidget {
@@ -51,12 +52,24 @@ class _SafeImageState extends State<SafeImage> {
 
     Widget imageWidget;
     if (isNetwork) {
-      imageWidget = Image.network(
-        _currentPath!,
+      imageWidget = CachedNetworkImage(
+        imageUrl: _currentPath!,
         width: widget.width,
         height: widget.height,
         fit: widget.fit,
-        errorBuilder: (c, e, st) => _fallback(radius),
+        placeholder: (c, _) => widget.placeholder ??
+            Container(
+              width: widget.width,
+              height: widget.height,
+              color: Colors.grey.shade200,
+              alignment: Alignment.center,
+              child: const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+        errorWidget: (c, e, st) => _fallback(radius),
       );
     } else {
       imageWidget = Image.asset(

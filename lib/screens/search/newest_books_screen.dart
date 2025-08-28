@@ -4,19 +4,19 @@ import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/book_service.dart';
+import '../../services/auth_firebase_service.dart';
 import '../../widgets/mobile_book_card.dart';
 import '../../models/book_model.dart';
 import '../book/book_details_screen.dart';
-import '../../services/auth_firebase_service.dart';
 
-class PopularBooksScreen extends StatefulWidget {
-  const PopularBooksScreen({super.key});
+class NewestBooksScreen extends StatefulWidget {
+  const NewestBooksScreen({super.key});
 
   @override
-  State<PopularBooksScreen> createState() => _PopularBooksScreenState();
+  State<NewestBooksScreen> createState() => _NewestBooksScreenState();
 }
 
-class _PopularBooksScreenState extends State<PopularBooksScreen> {
+class _NewestBooksScreenState extends State<NewestBooksScreen> {
   final ScrollController _scrollController = ScrollController();
   bool _initialized = false;
 
@@ -31,19 +31,16 @@ class _PopularBooksScreenState extends State<PopularBooksScreen> {
 
   Future<void> _loadFirst() async {
     final service = context.read<BookService>();
-    await service.loadFirstBooksPage(
-        orderBy: 'downloadCount', descending: true, limit: 20);
+    await service.loadFirstBooksPage(orderBy: 'createdAt', descending: true, limit: 20);
     if (mounted) setState(() => _initialized = true);
   }
 
   void _onScroll() {
     final service = context.read<BookService>();
-    if (!service.hasMorePaged(orderBy: 'downloadCount', descending: true)) return;
+    if (!service.hasMorePaged(orderBy: 'createdAt', descending: true)) return;
     if (service.isLoading) return;
-    if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 300) {
-      service.loadNextBooksPage(
-          orderBy: 'downloadCount', descending: true, limit: 20);
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 300) {
+      service.loadNextBooksPage(orderBy: 'createdAt', descending: true, limit: 20);
     }
   }
 
@@ -57,10 +54,8 @@ class _PopularBooksScreenState extends State<PopularBooksScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final service = context.watch<BookService>();
-    final items = service.getPagedBooks(
-        orderBy: 'downloadCount', descending: true);
-    final hasMore = service.hasMorePaged(
-        orderBy: 'downloadCount', descending: true);
+    final items = service.getPagedBooks(orderBy: 'createdAt', descending: true);
+    final hasMore = service.hasMorePaged(orderBy: 'createdAt', descending: true);
 
     Widget listContent() {
       return RefreshIndicator(
@@ -78,10 +73,11 @@ class _PopularBooksScreenState extends State<PopularBooksScreen> {
           itemBuilder: (context, index) {
             if (index >= items.length) {
               return const Center(
-                  child: Padding(
-                padding: EdgeInsets.all(8.0),
-                child: CircularProgressIndicator(),
-              ));
+                child: Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: CircularProgressIndicator(),
+                ),
+              );
             }
             final book = items[index];
             final isSaved = context.read<BookService>().isBookSaved(book.id);
@@ -91,9 +87,7 @@ class _PopularBooksScreenState extends State<PopularBooksScreen> {
               onTap: () => _openDetails(context, book),
               onBookmark: () async {
                 final uid = context.read<AuthFirebaseService>().currentUser?.uid;
-                final nowSaved = await service.toggleSavedBook(book.id, userId: uid);
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(nowSaved ? 'تم الحفظ' : 'تم الإلغاء')));
+                await service.toggleSavedBook(book.id, userId: uid);
               },
             );
           },
@@ -106,11 +100,11 @@ class _PopularBooksScreenState extends State<PopularBooksScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.popularTitle)),
+      appBar: AppBar(title: Text(l10n.newestTitle)),
       body: !_initialized && service.isLoading
           ? _buildSkeletonGrid()
           : items.isEmpty
-              ? bannerOrEmpty(Center(child: Text(l10n.noPopularBooks)))
+              ? bannerOrEmpty(Center(child: Text(l10n.noNewestBooks)))
               : bannerOrEmpty(listContent()),
     );
   }

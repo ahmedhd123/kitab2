@@ -41,6 +41,14 @@ dependencies:
   collection: ^1.19.0
   # Archive utilities for file compression
   archive: ^3.6.1
+  # Cached images مع Placeholder/Cache
+  cached_network_image: ^3.3.1
+  # فتح الروابط الخارجية (لافتة فهارس Firestore)
+  url_launcher: ^6.3.0
+  # إبقاء الشاشة قيد التشغيل أثناء القراءة
+  wakelock_plus: ^1.2.5
+  # التحكم في سطوع الشاشة داخل القارئ
+  screen_brightness: ^0.2.2
 
   # (اختياري لاحقاً) للتنسيق الدولي للتواريخ والأرقام
   # intl: ^0.19.0
@@ -52,6 +60,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  generate: true
   assets:
     # مجلدات الموارد (أضف الملفات الفعلية لاحقاً داخل هذه المسارات)
     - assets/books/
@@ -59,3 +68,16 @@ flutter:
     # تأكد من إنشاء هذه المجلدات وإضافة ملفات PDF و صور أغلفة الكتب
   # fonts مفرغة مؤقتاً حتى إضافة ملفات الخط فعلياً
   fonts: []
+
+  # إعدادات الترجمة التلقائية
+  # يستخدم flutter gen-l10n هذه الإعدادات لتوليد AppLocalizations
+  # سنفترض ملفات arb موجودة تحت lib/l10n
+  # default locale: ar
+  # لتشغيل التوليد: flutter gen-l10n (يعمل تلقائياً مع build/run)
+  # ملاحظة: VS Code سيولد تلقائياً عند تشغيل التطبيق
+  # l10n:
+  #   arb-dir: lib/l10n
+  #   template-arb-file: app_ar.arb
+  #   output-localization-file: app_localizations.dart
+  #   output-class: AppLocalizations
+  #   preferred-supported-locales: [ar, en]

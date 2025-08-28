@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
 // تمت إزالة SimpleAuthService بعد الانتقال الكامل إلى Firebase Auth
 import 'services/book_service.dart';
 import 'services/book_repository.dart';
@@ -106,6 +107,7 @@ class MyApp extends StatelessWidget {
             darkTheme: AppTheme.darkTheme,
             themeMode: themeService.themeMode,
             localizationsDelegates: const [
+              AppLocalizations.delegate,
               GlobalMaterialLocalizations.delegate,
               GlobalWidgetsLocalizations.delegate,
               GlobalCupertinoLocalizations.delegate,
@@ -116,7 +118,13 @@ class MyApp extends StatelessWidget {
             ],
             locale: const Locale('ar'),
             builder: (context, child) {
-              return Directionality(textDirection: TextDirection.rtl, child: child!);
+              // دعم تكبير النص عالميًا لمراعاة الوصولية
+              final mq = MediaQuery.of(context);
+              final textScale = mq.textScaleFactor.clamp(1.0, 1.3);
+              return MediaQuery(
+                data: mq.copyWith(textScaleFactor: textScale),
+                child: Directionality(textDirection: TextDirection.rtl, child: child!),
+              );
             },
             // Named routes used by various screens (SplashScreen and auth flows)
             routes: {

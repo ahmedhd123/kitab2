@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/enhanced_design_tokens.dart';
+import 'safe_image.dart';
 
 /// كارت كتاب محسّن بتصميم حديث وتفاعلي
 class EnhancedBookCard extends StatefulWidget {
@@ -125,11 +126,9 @@ class _EnhancedBookCardState extends State<EnhancedBookCard>
                               child: widget.coverUrl != null
                                   ? ClipRRect(
                                       borderRadius: BorderRadius.circular(EnhancedRadius.sm),
-                                      child: Image.network(
-                                        widget.coverUrl!,
+                                      child: SafeImage(
+                                        assetPath: widget.coverUrl,
                                         fit: BoxFit.cover,
-                                        errorBuilder: (context, error, stackTrace) =>
-                                            _buildBookIcon(),
                                       ),
                                     )
                                   : _buildBookIcon(),
@@ -426,11 +425,9 @@ class CommunityBookCard extends StatelessWidget {
                   child: coverUrl != null
                       ? ClipRRect(
                           borderRadius: BorderRadius.circular(EnhancedRadius.md),
-                          child: Image.network(
-                            coverUrl!,
+                          child: SafeImage(
+                            assetPath: coverUrl,
                             fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
-                                _buildMiniBookIcon(),
                           ),
                         )
                       : _buildMiniBookIcon(),

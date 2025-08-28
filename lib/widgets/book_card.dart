@@ -4,6 +4,7 @@ import '../utils/design_tokens.dart';
 import '../models/book_model.dart';
 import '../services/book_service.dart';
 import '../screens/book/book_details_screen.dart';
+import '../services/auth_firebase_service.dart';
 
 class BookCard extends StatelessWidget {
   final BookModel book;
@@ -44,65 +45,69 @@ class BookCard extends StatelessWidget {
               children: [
                 Expanded(
                   flex: 58,
-                  child: Container(
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          catColor.withOpacity(.80),
-                          catColor.withOpacity(.55),
-                        ],
-                        begin: Alignment.topRight,
-                        end: Alignment.bottomLeft,
-                      ),
-                    ),
-                    child: Stack(
-                      children: [
-                        Center(
-                          child: Icon(
-                            Icons.menu_book_rounded,
-                            size: 52,
-                            color: Colors.white.withOpacity(.90),
-                          ),
+                  child: Hero(
+                    tag: 'book_cover_${book.id}',
+                    child: Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            catColor.withOpacity(.80),
+                            catColor.withOpacity(.55),
+                          ],
+                          begin: Alignment.topRight,
+                          end: Alignment.bottomLeft,
                         ),
-                        Positioned(
-                          top: 10,
-                          right: 10,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(.30),
-                              borderRadius: BorderRadius.circular(AppRadius.sm),
+                      ),
+                      child: Stack(
+                        children: [
+                          Center(
+                            child: Icon(
+                              Icons.menu_book_rounded,
+                              size: 52,
+                              color: Colors.white.withOpacity(.90),
                             ),
-                            child: Text(
-                              book.category,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
+                          ),
+                          Positioned(
+                            top: 10,
+                            right: 10,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(.30),
+                                borderRadius: BorderRadius.circular(AppRadius.sm),
+                              ),
+                              child: Text(
+                                book.category,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        Positioned(
-                          top: 4,
-                          left: 4,
-                          child: IconButton(
-                            icon: Icon(
-                              isSaved ? Icons.bookmark : Icons.bookmark_outline,
-                              color: isSaved ? AppColors.warning : Colors.white,
+                          Positioned(
+                            top: 4,
+                            left: 4,
+                            child: IconButton(
+                              icon: Icon(
+                                isSaved ? Icons.bookmark : Icons.bookmark_outline,
+                                color: isSaved ? AppColors.warning : Colors.white,
+                              ),
+                              splashRadius: 22,
+                              onPressed: () {
+                                final uid = Provider.of<AuthFirebaseService>(context, listen: false).currentUser?.uid;
+                                if (isSaved) {
+                                  bookService.unsaveBook(book.id, userId: uid);
+                                } else {
+                                  bookService.saveBook(book.id, userId: uid);
+                                }
+                              },
                             ),
-                            splashRadius: 22,
-                            onPressed: () {
-                              if (isSaved) {
-                                bookService.unsaveBook(book.id);
-                              } else {
-                                bookService.saveBook(book.id);
-                              }
-                            },
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),

@@ -199,16 +199,15 @@ class _RedesignedHomeScreenState extends State<RedesignedHomeScreen>
             onTap: () => _navigateToCreatePlan(),
           ),
           const SizedBox(height: 12),
-          // زر "رفع كتاب" يظهر فقط إن كانت للمستخدم صلاحية الرفع
+          // زر "رفع كتاب" يظهر فقط إن كانت للمستخدم صلاحية الرفع (توحيد عبر الخدمة)
           Consumer<AuthFirebaseService>(
             builder: (context, auth, _) {
               final uid = auth.currentUser?.uid;
-              final email = auth.currentUser?.email ?? '';
               if (uid == null) return const SizedBox.shrink();
-              return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
+              return FutureBuilder<bool>(
+                future: auth.canCurrentUserUploadBooks(),
                 builder: (context, snap) {
-                  final can = (email == 'a@b.com') || (snap.data?.data()?['canUploadBooks'] == true);
+                  final can = snap.data == true;
                   if (!can) return const SizedBox.shrink();
                   return Column(
                     mainAxisSize: MainAxisSize.min,
@@ -354,14 +353,12 @@ class _RedesignedHomeScreenState extends State<RedesignedHomeScreen>
   Future<void> _navigateToAddBook() async {
     final auth = context.read<AuthFirebaseService>();
     final uid = auth.currentUser?.uid;
-    final email = auth.currentUser?.email ?? '';
     if (uid == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('يرجى تسجيل الدخول أولاً')));
       return;
     }
     try {
-      final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-      final can = (email == 'a@b.com') || (doc.data()?['canUploadBooks'] == true);
+      final can = await auth.canCurrentUserUploadBooks();
       if (!mounted) return;
       if (can) {
         Navigator.push(context, MaterialPageRoute(builder: (_) => const UploadBookScreen()));
@@ -701,28 +698,31 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
             ),
           ),
           const SizedBox(height: 12),
-          // اقتراحات البحث السريع
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                'الأدب العربي', 'روايات تاريخية', 'كتب التنمية', 'الفلسفة', 'العلوم', 'السيرة الذاتية',
-              ].map((suggestion) => Container(
-                margin: const EdgeInsets.only(left: 8),
-                child: ActionChip(
-                  label: Text(
-                    suggestion,
-                    style: const TextStyle(fontSize: 12, color: EnhancedAppColors.primary),
-                  ),
-                  backgroundColor: EnhancedAppColors.primary.withOpacity(0.1),
-                  onPressed: () {
-                    _searchController.text = suggestion;
-                    widget.switchTab(1);
-                  },
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          // اقتراحات البحث السريع من مصدر مركزي (فئات BookService)
+          Consumer<BookService>(
+            builder: (context, bookService, _) {
+              final suggestions = BookService.categories.take(8).toList();
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: suggestions.map((suggestion) => Container(
+                    margin: const EdgeInsets.only(left: 8),
+                    child: ActionChip(
+                      label: Text(
+                        suggestion,
+                        style: const TextStyle(fontSize: 12, color: EnhancedAppColors.primary),
+                      ),
+                      backgroundColor: EnhancedAppColors.primary.withOpacity(0.1),
+                      onPressed: () {
+                        _searchController.text = suggestion;
+                        widget.switchTab(1);
+                      },
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    ),
+                  )).toList(),
                 ),
-              )).toList(),
-            ),
+              );
+            },
           ),
         ],
       ),
@@ -1061,7 +1061,7 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
   Widget _buildTrendingBooks() {
     return Consumer<BookService>(
       builder: (context, bookService, _) {
-        final trendingBooks = bookService.books.take(5).toList();
+        final trendingBooks = bookService.getTrendingBooks(limit: 5);
         
         if (trendingBooks.isEmpty) {
           return _buildEmptyState(
@@ -1168,7 +1168,6 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
         final completedFromBooks = uid.isEmpty ? 0 : bookService.getCompletedBooks(uid).length;
 
         if (currentChallenge == null) {
-          // لا يوجد تحدي نشط - عرض دعوة لإنشاء تحدي
           return _buildSectionWithHeader(
             title: '🏆 تحديات القراءة',
             subtitle: 'تحدى نفسك وحقق أهدافك',
@@ -1230,7 +1229,6 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
           );
         }
 
-        // عرض التحدي النشط - حساب ديناميكي للتقدم بناءً على الكتب المكتملة
         final targetBooks = currentChallenge.targetBooks ?? 0;
         final completedBooks = completedFromBooks;
         final progress = targetBooks > 0
@@ -1238,7 +1236,6 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
             : currentChallenge.challengeProgress;
         final progressPercent = (progress * 100).round();
 
-        // حساب الأيام المتبقية
         final now = DateTime.now();
         final endDate = currentChallenge.endAt ?? DateTime(now.year, 12, 31);
         final daysRemaining = endDate.difference(now).inDays;
@@ -1250,7 +1247,7 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
           child: Container(
             height: 150,
             margin: const EdgeInsets.symmetric(horizontal: EnhancedSpacing.lg),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -1259,7 +1256,7 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
                   EnhancedAppColors.accent,
                 ],
               ),
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.all(Radius.circular(20)),
             ),
             child: Padding(
               padding: const EdgeInsets.all(20),
@@ -1348,20 +1345,6 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
     );
   }
 
-  // الأدوات المساعدة
-  String _getWelcomeTimeMessage() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'صباح الخير';
-    if (hour < 18) return 'مساء الخير';
-    return 'مرحباً مجدداً';
-  }
-
-  void _navigateToNotifications() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('الإشعارات قيد التطوير')),
-    );
-  }
-
   Widget _buildSectionWithHeader({
     required String title,
     String? subtitle,
@@ -1384,9 +1367,9 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
                     Text(
                       title,
                       style: const TextStyle(
+                        color: EnhancedAppColors.gray900,
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: EnhancedAppColors.gray900,
                       ),
                     ),
                     if (subtitle != null) ...[
@@ -1394,8 +1377,9 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
                       Text(
                         subtitle,
                         style: const TextStyle(
-                          fontSize: 12,
                           color: EnhancedAppColors.gray600,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
@@ -1494,17 +1478,16 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
     );
   }
 
+  // تحديث دالة التنقل داخل الصفحة الداخلية أيضاً
   Future<void> _navigateToAddBook() async {
     final auth = context.read<AuthFirebaseService>();
     final uid = auth.currentUser?.uid;
-    final email = auth.currentUser?.email ?? '';
     if (uid == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('يرجى تسجيل الدخول أولاً')));
       return;
     }
     try {
-      final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
-      final can = (email == 'a@b.com') || (doc.data()?['canUploadBooks'] == true);
+      final can = await auth.canCurrentUserUploadBooks();
       if (!mounted) return;
       if (can) {
         Navigator.push(context, MaterialPageRoute(builder: (_) => const UploadBookScreen()));
@@ -1550,6 +1533,19 @@ class _RedesignedHomePageState extends State<RedesignedHomePage>
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('ماسح الباركود قيد التطوير')),
     );
+  }
+
+  void _navigateToNotifications() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('الإشعارات قريباً')),
+    );
+  }
+
+  String _getWelcomeTimeMessage() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'صباح الخير';
+    if (hour < 17) return 'مساء الخير';
+    return 'أهلًا وسهلًا';
   }
 }
 
